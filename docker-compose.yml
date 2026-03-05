@@ -64,6 +64,7 @@ services:
       DATABASE__URL: postgresql://postgres:postgres@db:5432/human_rating_platform
       PYTHONPATH: /app/backend
       UV_PROJECT_ENVIRONMENT: /uv-env
+      ADMIN_AUTH_ENABLED: "${ADMIN_AUTH_ENABLED:-true}"
     volumes:
       - ./:/app
       - uv_project_env:/uv-env

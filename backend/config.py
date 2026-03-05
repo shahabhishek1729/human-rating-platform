@@ -80,6 +80,12 @@ class TestingSettings(_StrictModel):
     )
 
 
+class ClerkSettings(_StrictModel):
+    issuer: str = ""
+    jwks_url: str = ""
+    audience: str = "human-rating-platform-admin-api"
+
+
 class SeedingSettings(_StrictModel):
     enabled: bool = False
     experiment_name: str = "Seed - Local Baseline"
@@ -93,7 +99,21 @@ class Settings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     exports: ExportSettings = Field(default_factory=ExportSettings)
     testing: TestingSettings = Field(default_factory=TestingSettings)
+    clerk: ClerkSettings = Field(default_factory=ClerkSettings)
     seeding: SeedingSettings = Field(default_factory=SeedingSettings)
+
+    # Admin/session config (mapped from flat env vars for ergonomics)
+    admin_auth_enabled: bool = Field(default=True)
+    admin_allowlist: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Comma-separated list of allowlisted admin emails.",
+    )
+    app_secret_key: str = Field(
+        description="Secret for signing the HTTP-only admin session cookie.",
+    )
+    hrp_session_cookie: str = Field(default="hrp_session")
+    hrp_session_max_age: int = Field(default=60 * 60 * 24 * 7)  # 7 days
+    cookie_secure: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -121,6 +141,26 @@ class Settings(BaseSettings):
             TomlConfigSettingsSource(settings_cls),
             file_secret_settings,
         )
+
+    @field_validator("admin_allowlist", mode="before")
+    @classmethod
+    def parse_admin_allowlist(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            # Allow JSON array or comma-separated string
+            value = value.strip()
+            if value.startswith("["):
+                try:
+                    arr = json.loads(value)
+                    if isinstance(arr, list):
+                        return [str(x).strip() for x in arr if str(x).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(x).strip() for x in value if str(x).strip()]
+        return []
 
     @property
     def sync_database_url(self) -> str:

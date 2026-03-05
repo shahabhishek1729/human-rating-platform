@@ -40,6 +40,73 @@ sample_questions.csv  Example CSV for testing uploads
 
 ---
 
+## Authentication (Clerk + Allowlist)
+
+This project uses Clerk for frontend identity and a backend HTTP‑only cookie for invite‑only admin access.
+
+- Frontend (Clerk): The React app is wrapped with `ClerkProvider` and uses prebuilt components for sign‑in/sign‑up. Configure with a publishable key.
+- Backend (allowlist + session): After Clerk sign‑in, the frontend calls `POST /api/admin/auth/login` with `Authorization: Bearer <Clerk JWT (template=admin)>`. The backend verifies the JWT against Clerk JWKS, enforces issuer and audience, extracts the email from claims, checks an env‑based allowlist, and issues a signed HTTP‑only cookie that unlocks `/api/admin/*` routes. Signing out clears the cookie.
+
+### Cookie model
+
+- Name: `HRP_SESSION_COOKIE` (default `hrp_session`)
+- Scope: `Path=/`, `HttpOnly`; SameSite depends on env — `Lax` in local dev, `None; Secure` in production (`COOKIE_SECURE=true`).
+- Contents: a compact HMAC‑signed token with `{ email, iat, exp }`. No server‑side store is required.
+- Validation: The server validates the signature and enforces `exp` on every request (session expires server‑side regardless of browser cookie TTL) and re‑checks the email against `ADMIN_ALLOWLIST`.
+- Usage: The frontend sends requests with `credentials: 'include'`, so the browser includes the cookie on `/api` calls.
+
+### Clerk Configuration
+
+- Backend env (nested keys as configured in `config.py`):
+  - `CLERK__ISSUER`: your Clerk issuer URL (e.g., `https://<your-tenant>.clerk.accounts.dev`).
+  - `CLERK__JWKS_URL`: `https://<your-tenant>.clerk.accounts.dev/.well-known/jwks.json`.
+  - `CLERK__AUDIENCE`: audience string set in your Clerk JWT template (e.g., `human-rating-platform-admin-api`).
+- Clerk JWT template (Dashboard → JWT Templates):
+  - Name: `admin`
+  - Claims JSON:
+    ```json
+    { "email": "{{user.primary_email_address}}" }
+    ```
+  - Audience: set to match `CLERK__AUDIENCE`.
+  - Issuer/JWKS: the values above are auto-derived by Clerk; copy them into backend env.
+- Frontend usage:
+  - Retrieve token with `useAuth().getToken({ template: 'admin' })` and send `Authorization: Bearer <token>` to `/api/admin/auth/login`.
+
+### Allowlist
+
+- Controlled by env var `ADMIN_ALLOWLIST` (comma‑separated or JSON array of emails).
+- If your email isn’t in the allowlist, admin login returns 403 and the UI shows a friendly explanation.
+# Admin allowlist + session cookie
+ADMIN_ALLOWLIST=alice@example.com,bob@example.com
+APP_SECRET_KEY=please-change-me-to-a-long-random-string
+HRP_SESSION_COOKIE=hrp_session
+HRP_SESSION_MAX_AGE=604800
+COOKIE_SECURE=false
+
+# CORS for local dev
+APP__CORS_ORIGINS=["http://localhost:5173","http://localhost:8000"]
+
+# Database
+DATABASE__URL=postgresql://postgres:postgres@localhost:5432/human_rating_platform
+```
+
+### Render deployment envs
+
+Frontend (Render Static Site):
+
+- `VITE_CLERK_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY`
+- `VITE_API_HOST=https://<your-api-service>.onrender.com`  (origin only; no path)
+
+Backend (Render Web Service):
+
+- `DATABASE__URL=postgresql://<user>:<pass>@<host>:5432/<db>` (Render Postgres internal URL)
+- `APP__CORS_ORIGINS=["https://<your-web-service>.onrender.com"]`
+- `ADMIN_ALLOWLIST=alice@example.com,bob@example.com`
+- `APP_SECRET_KEY=<long-random-string>`
+- `COOKIE_SECURE=true`
+
+Clerk Dashboard: add your Render web domain under Settings → Domains so Clerk is allowed to operate on that origin. 
+
 ## Quick Start (~3 minutes)
 
 ### Prerequisites
@@ -47,6 +114,7 @@ sample_questions.csv  Example CSV for testing uploads
 - Python 3.10+
 - Node.js 20+
 - Docker + Docker Compose (must be running)
+- Clerk Publishable Key (from Clerk Dashboard → API Keys)
 
 ### 1) Initialize env files
 
@@ -54,7 +122,22 @@ sample_questions.csv  Example CSV for testing uploads
 make env.sync
 ```
 
-Creates `backend/.env` and `frontend/.env` from their `.env.example` templates.
+Creates `backend/.env` and `frontend/.env` from templates. Then set:
+
+- `frontend/.env.local`
+  
+  ```
+  VITE_CLERK_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+  ```
+
+- `backend/.env`
+  
+  ```
+  ADMIN_ALLOWLIST=you@example.com
+  APP_SECRET_KEY=please-change-me-to-a-long-random-string
+  APP__CORS_ORIGINS=["http://localhost:5173","http://localhost:8000"]
+  # DATABASE__URL=postgresql://postgres:postgres@localhost:5432/human_rating_platform
+  ```
 
 ### 2) Start backend + DB (Terminal A)
 
@@ -76,6 +159,8 @@ make up
 - **App:** http://localhost:5173
 - **API docs (Swagger):** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/health
+
+Sign in with a Clerk account whose email appears in `ADMIN_ALLOWLIST`. The admin panel at `/admin` becomes available and the backend issues an HTTP‑only session cookie that authorizes `/api/admin/*` endpoints. Signing out clears this cookie.
 
 ---
 
@@ -168,6 +253,13 @@ Env keys use Pydantic's nested `__` delimiter for nested settings models:
 - `EXPORTS__STREAM_BATCH_SIZE` — CSV export chunking (memory/throughput tradeoff)
 - `TESTING__EXPORT_SEED_ROW_COUNT` — characterization test dataset volume
 - `SEEDING__*` — local seed generation (`enabled`, `experiment_name`, `question_count`, etc.)
+
+Top‑level convenience envs (not nested):
+
+- `ADMIN_ALLOWLIST` — comma‑separated or JSON array of admin emails
+- `APP_SECRET_KEY` — HMAC signer for the HTTP‑only admin session cookie
+- `HRP_SESSION_COOKIE`, `HRP_SESSION_MAX_AGE`, `COOKIE_SECURE` — cookie name/ttl/secure flag
+ - `ADMIN_AUTH_ENABLED` — set to `false` to bypass admin auth in dev/tests
 
 Frontend env (`frontend/.env`):
 
@@ -310,6 +402,8 @@ Interactive Swagger docs are available at `/docs` when the backend is running.
 
 ### Admin
 
+- `POST /api/admin/auth/login` — issue HTTP‑only admin cookie for allowlisted email
+- `POST /api/admin/auth/logout` — clear admin cookie
 - `POST /api/admin/experiments` — create experiment
 - `GET /api/admin/experiments` — list experiments
 - `POST /api/admin/experiments/{id}/upload` — upload question CSV

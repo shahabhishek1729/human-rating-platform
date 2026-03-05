@@ -1,17 +1,69 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, Query, UploadFile, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_session
 from schemas import ExperimentCreate, ExperimentResponse
 from services import admin as admin_service
+from auth import require_admin, get_admin_manager
+from config import get_settings
+from services.authn import verify_clerk_token_and_get_email
 
+# Public admin router (for auth endpoints)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+# Secure router for admin-only endpoints
+secure_router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
-@router.post("/experiments", response_model=ExperimentResponse)
+
+async def get_clerk_email_from_request(request: Request) -> str:
+    # Require a Clerk session token via Authorization: Bearer <token>
+    auth = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+
+    token = auth.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid Bearer token")
+
+    settings = get_settings()
+    try:
+        email = await verify_clerk_token_and_get_email(token, settings)
+    except HTTPException:
+        # Pass through explicit HTTP errors (e.g., 401)
+        raise
+    except Exception:
+        # Hide internals behind a generic 401
+        raise HTTPException(status_code=401, detail="Invalid Clerk token")
+
+    return email
+
+
+@router.post("/auth/login")
+async def admin_login(
+    email: str = Depends(get_clerk_email_from_request),
+    manager=Depends(get_admin_manager),
+):
+    settings = get_settings()
+    allow = {e.strip().lower() for e in settings.admin_allowlist}
+    if email.strip().lower() not in allow:
+        return JSONResponse(status_code=403, content={"message": "Email is not allowlisted"})
+
+    resp = JSONResponse({"ok": True})
+    manager.set_cookie(resp, email.strip())
+    return resp
+
+
+@router.post("/auth/logout")
+async def admin_logout(manager=Depends(get_admin_manager)):
+    resp = JSONResponse({"ok": True})
+    manager.clear_cookie(resp)
+    return resp
+
+
+@secure_router.post("/experiments", response_model=ExperimentResponse)
 async def create_experiment(
     experiment: ExperimentCreate,
     db: AsyncSession = Depends(get_session),
@@ -19,7 +71,7 @@ async def create_experiment(
     return await admin_service.create_experiment(experiment, db)
 
 
-@router.get("/experiments", response_model=list[ExperimentResponse])
+@secure_router.get("/experiments", response_model=list[ExperimentResponse])
 async def list_experiments(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -28,7 +80,7 @@ async def list_experiments(
     return await admin_service.list_experiments(skip=skip, limit=limit, db=db)
 
 
-@router.post("/experiments/{experiment_id}/upload")
+@secure_router.post("/experiments/{experiment_id}/upload")
 async def upload_questions(
     experiment_id: int,
     file: UploadFile = File(...),
@@ -41,7 +93,7 @@ async def upload_questions(
     )
 
 
-@router.get("/experiments/{experiment_id}/uploads")
+@secure_router.get("/experiments/{experiment_id}/uploads")
 async def list_uploads(
     experiment_id: int,
     skip: int = Query(0, ge=0),
@@ -56,7 +108,7 @@ async def list_uploads(
     )
 
 
-@router.get("/experiments/{experiment_id}/export")
+@secure_router.get("/experiments/{experiment_id}/export")
 async def export_ratings(
     experiment_id: int,
     db: AsyncSession = Depends(get_session),
@@ -72,7 +124,7 @@ async def export_ratings(
     )
 
 
-@router.delete("/experiments/{experiment_id}")
+@secure_router.delete("/experiments/{experiment_id}")
 async def delete_experiment(
     experiment_id: int,
     db: AsyncSession = Depends(get_session),
@@ -80,7 +132,7 @@ async def delete_experiment(
     return await admin_service.delete_experiment(experiment_id=experiment_id, db=db)
 
 
-@router.get("/experiments/{experiment_id}/stats")
+@secure_router.get("/experiments/{experiment_id}/stats")
 async def get_experiment_stats(
     experiment_id: int,
     db: AsyncSession = Depends(get_session),
@@ -88,7 +140,7 @@ async def get_experiment_stats(
     return await admin_service.get_experiment_stats(experiment_id=experiment_id, db=db)
 
 
-@router.get("/experiments/{experiment_id}/analytics")
+@secure_router.get("/experiments/{experiment_id}/analytics")
 async def get_experiment_analytics(
     experiment_id: int,
     db: AsyncSession = Depends(get_session),

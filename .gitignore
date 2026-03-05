@@ -5,8 +5,10 @@ __pycache__/
 *.so
 .Python
 .env
+.env.local
 backend/.env
 frontend/.env
+frontend/.env.local
 .venv
 venv/
 

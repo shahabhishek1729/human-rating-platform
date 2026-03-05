@@ -461,6 +461,7 @@ def test_migration_runner_current_and_history_commands_succeed():
 
 def test_app_creation_succeeds_with_default_env():
     env = os.environ.copy()
+    env.setdefault("APP_SECRET_KEY", "test-secret")
 
     result = subprocess.run(
         [sys.executable, "-c", "from main import create_app; create_app(); print('ok')"],

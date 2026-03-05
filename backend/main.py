@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
 
     api_router = APIRouter(prefix="/api")
     api_router.include_router(admin.router)
+    api_router.include_router(admin.secure_router)
     api_router.include_router(raters.router)
     api_router.add_api_route("/health", health, methods=["GET"])
     app.include_router(api_router)
