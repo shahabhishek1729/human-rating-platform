@@ -131,11 +131,6 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
     }
   };
 
-  const getRaterLink = () => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/rate?experiment_id=${experiment.id}&PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}`;
-  };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setSuccess('Copied to clipboard!');
@@ -522,33 +517,22 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
                       {isPublishing ? 'Publishing...' : 'Publish on Prolific'}
                     </button>
                   </div>
+                  {experiment.prolific_completion_url && (
+                    <div style={{ ...styles.inputGroup, marginTop: '16px' }}>
+                      <label style={styles.label}>Completion URL</label>
+                      <input
+                        type="text"
+                        value={experiment.prolific_completion_url}
+                        readOnly
+                        style={styles.input}
+                      />
+                      <div style={styles.hint}>Raters redirect here when finished.</div>
+                    </div>
+                  )}
                 </>
               ) : (
-                <div style={styles.inputGroup}>
-                  <label style={styles.label}>Study URL</label>
-                  <input
-                    type="text"
-                    value={getRaterLink()}
-                    readOnly
-                    onClick={(e) => {
-                      (e.target as HTMLInputElement).select();
-                      copyToClipboard(getRaterLink());
-                    }}
-                    style={styles.input}
-                  />
-                  <div style={styles.hint}>Click to copy. Use this as your study URL in Prolific.</div>
-                </div>
-              )}
-              {experiment.prolific_completion_url && (
-                <div style={{ ...styles.inputGroup, marginTop: experiment.prolific_study_id ? '0' : undefined }}>
-                  <label style={styles.label}>Completion URL</label>
-                  <input
-                    type="text"
-                    value={experiment.prolific_completion_url}
-                    readOnly
-                    style={styles.input}
-                  />
-                  <div style={styles.hint}>Raters redirect here when finished.</div>
+                <div style={{ color: '#6c757d', fontStyle: 'italic' }}>
+                  No Prolific study linked to this experiment.
                 </div>
               )}
             </div>

@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-import pytest
 import respx
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -24,14 +23,32 @@ def _unique_name(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex[:10]}"
 
 
-def _create_experiment(client: TestClient, *, completion_url: str | None = None) -> dict:
+PROLIFIC_BASE = get_settings().prolific.base_url
+FAKE_STUDY_ID = "65abc123def456"
+
+
+def _experiment_payload(name: str | None = None) -> dict:
+    return {
+        "name": name or _unique_name("experiment"),
+        "num_ratings_per_question": 2,
+        "prolific": {
+            "description": "Test study",
+            "estimated_completion_time": 10,
+            "reward": 500,
+            "total_available_places": 5,
+        },
+    }
+
+
+def _create_experiment(client: TestClient) -> dict:
+    """Create an experiment with mocked Prolific API.
+
+    Must be called within an active ``respx.mock`` context.
+    """
+    _mock_create_study()
     response = client.post(
         "/api/admin/experiments",
-        json={
-            "name": _unique_name("experiment"),
-            "num_ratings_per_question": 2,
-            "prolific_completion_url": completion_url,
-        },
+        json=_experiment_payload(),
     )
     assert response.status_code == 200
     return response.json()
@@ -158,6 +175,7 @@ def test_list_experiments_returns_empty_list_initially(client: TestClient):
     assert response.json() == []
 
 
+@respx.mock
 def test_create_experiment_then_list_contains_it(client: TestClient):
     created = _create_experiment(client)
 
@@ -171,6 +189,7 @@ def test_create_experiment_then_list_contains_it(client: TestClient):
     assert items[0]["rating_count"] == 0
 
 
+@respx.mock
 def test_upload_questions_records_upload_and_stats(client: TestClient):
     experiment = _create_experiment(client)
     experiment_id = experiment["id"]
@@ -190,6 +209,7 @@ def test_upload_questions_records_upload_and_stats(client: TestClient):
     assert stats_payload["total_ratings"] == 0
 
 
+@respx.mock
 def test_upload_rejects_non_csv_file(client: TestClient):
     experiment = _create_experiment(client)
 
@@ -202,19 +222,18 @@ def test_upload_rejects_non_csv_file(client: TestClient):
     assert response.json()["detail"] == "File must be a CSV file"
 
 
+@respx.mock
 def test_start_session_creates_new_rater_session(client: TestClient):
-    experiment = _create_experiment(
-        client,
-        completion_url="https://app.prolific.com/submissions/complete?cc=ABCD1234",
-    )
+    experiment = _create_experiment(client)
 
     payload = _start_session(client, experiment["id"], prolific_pid="PID_1")
 
     assert payload["rater_id"] > 0
     assert payload["experiment_name"] == experiment["name"]
-    assert payload["completion_url"].startswith("https://app.prolific.com/")
+    assert payload["completion_url"] is not None
 
 
+@respx.mock
 def test_start_session_twice_resumes_same_active_session(client: TestClient):
     experiment = _create_experiment(client)
 
@@ -225,6 +244,7 @@ def test_start_session_twice_resumes_same_active_session(client: TestClient):
     assert first["session_start"] == second["session_start"]
 
 
+@respx.mock
 def test_start_session_rejects_after_end_session(client: TestClient):
     experiment = _create_experiment(client)
     session_payload = _start_session(client, experiment["id"], prolific_pid="PID_DONE")
@@ -245,6 +265,7 @@ def test_start_session_rejects_after_end_session(client: TestClient):
     assert restart_response.status_code == 403
 
 
+@respx.mock
 def test_next_question_returns_eligible_question(client: TestClient):
     experiment = _create_experiment(client)
     _upload_questions(client, experiment["id"])
@@ -260,6 +281,7 @@ def test_next_question_returns_eligible_question(client: TestClient):
     assert payload["question_id"] in {"q1", "q2"}
 
 
+@respx.mock
 def test_submit_rating_success_then_duplicate_rejected(client: TestClient):
     experiment = _create_experiment(client)
     _upload_questions(client, experiment["id"])
@@ -293,6 +315,7 @@ def test_submit_rating_success_then_duplicate_rejected(client: TestClient):
     assert duplicate.status_code == 400
 
 
+@respx.mock
 def test_submit_rating_rejects_invalid_confidence(client: TestClient):
     experiment = _create_experiment(client)
     _upload_questions(client, experiment["id"])
@@ -319,6 +342,7 @@ def test_submit_rating_rejects_invalid_confidence(client: TestClient):
     assert any(error["loc"][-1] == "confidence" for error in detail)
 
 
+@respx.mock
 def test_session_status_reflects_completed_questions(client: TestClient):
     experiment = _create_experiment(client)
     _upload_questions(client, experiment["id"])
@@ -350,6 +374,7 @@ def test_session_status_reflects_completed_questions(client: TestClient):
     assert payload["time_remaining_seconds"] > 0
 
 
+@respx.mock
 def test_next_question_marks_expired_session_inactive(
     client: TestClient,
     backdate_rater_session,
@@ -375,6 +400,7 @@ def test_next_question_marks_expired_session_inactive(
     assert status_response.json()["is_active"] is False
 
 
+@respx.mock
 def test_export_ratings_streams_large_dataset_in_chunks(client: TestClient, sync_engine):
     settings = get_settings()
     row_count = settings.testing.export_seed_row_count
@@ -393,6 +419,7 @@ def test_export_ratings_streams_large_dataset_in_chunks(client: TestClient, sync
     assert len(parsed_rows) == row_count + 1
 
 
+@respx.mock
 def test_analytics_endpoint_returns_expected_payload_shape(client: TestClient):
     experiment = _create_experiment(client)
     _upload_questions(client, experiment["id"])
@@ -482,32 +509,6 @@ def test_app_creation_succeeds_with_default_env():
 # These use respx to mock outbound httpx calls to the Prolific API, verifying
 # the full path: TestClient → FastAPI → service → Prolific client → mock.
 
-PROLIFIC_BASE = "https://api.prolific.com/api/v1"
-FAKE_STUDY_ID = "65abc123def456"
-
-
-@pytest.fixture()
-def enable_prolific():
-    """Temporarily enable Prolific by setting an API token on the cached settings."""
-    settings = get_settings()
-    original = settings.prolific.api_token
-    settings.prolific.api_token = "test-token"
-    yield settings
-    settings.prolific.api_token = original
-
-
-def _prolific_experiment_payload() -> dict:
-    return {
-        "name": _unique_name("prolific-exp"),
-        "num_ratings_per_question": 2,
-        "prolific": {
-            "description": "Test study",
-            "estimated_completion_time": 10,
-            "reward": 500,
-            "total_available_places": 5,
-        },
-    }
-
 
 def _mock_create_study(*, status: int = 200) -> respx.Route:
     body = {"id": FAKE_STUDY_ID, "status": "UNPUBLISHED"} if status == 200 else {}
@@ -527,16 +528,9 @@ def _mock_delete_study(*, status: int = 204) -> respx.Route:
     )
 
 
-def _create_prolific_experiment(client: TestClient) -> dict:
-    _mock_create_study()
-    resp = client.post("/api/admin/experiments", json=_prolific_experiment_payload())
-    assert resp.status_code == 200, resp.text
-    return resp.json()
-
-
 @respx.mock
-def test_prolific_create_stores_study_id(client: TestClient, enable_prolific):
-    data = _create_prolific_experiment(client)
+def test_prolific_create_stores_study_id(client: TestClient):
+    data = _create_experiment(client)
 
     assert data["prolific_study_id"] == FAKE_STUDY_ID
     assert data["prolific_study_status"] == "UNPUBLISHED"
@@ -546,10 +540,10 @@ def test_prolific_create_stores_study_id(client: TestClient, enable_prolific):
 
 
 @respx.mock
-def test_prolific_create_failure_returns_502(client: TestClient, enable_prolific):
+def test_prolific_create_failure_returns_502(client: TestClient):
     _mock_create_study(status=500)
 
-    resp = client.post("/api/admin/experiments", json=_prolific_experiment_payload())
+    resp = client.post("/api/admin/experiments", json=_experiment_payload())
 
     assert resp.status_code == 502
 
@@ -559,8 +553,8 @@ def test_prolific_create_failure_returns_502(client: TestClient, enable_prolific
 
 
 @respx.mock
-def test_prolific_publish_updates_status(client: TestClient, enable_prolific):
-    data = _create_prolific_experiment(client)
+def test_prolific_publish_updates_status(client: TestClient):
+    data = _create_experiment(client)
     experiment_id = data["id"]
 
     route = _mock_publish_study()
@@ -573,8 +567,8 @@ def test_prolific_publish_updates_status(client: TestClient, enable_prolific):
 
 
 @respx.mock
-def test_prolific_delete_calls_prolific_api(client: TestClient, enable_prolific):
-    data = _create_prolific_experiment(client)
+def test_prolific_delete_calls_prolific_api(client: TestClient):
+    data = _create_experiment(client)
     experiment_id = data["id"]
 
     route = _mock_delete_study()
@@ -589,8 +583,8 @@ def test_prolific_delete_calls_prolific_api(client: TestClient, enable_prolific)
 
 
 @respx.mock
-def test_prolific_delete_succeeds_when_api_fails(client: TestClient, enable_prolific):
-    data = _create_prolific_experiment(client)
+def test_prolific_delete_succeeds_when_api_fails(client: TestClient):
+    data = _create_experiment(client)
     experiment_id = data["id"]
 
     _mock_delete_study(status=500)
@@ -602,8 +596,8 @@ def test_prolific_delete_succeeds_when_api_fails(client: TestClient, enable_prol
 
 
 @respx.mock
-def test_prolific_delete_handles_404(client: TestClient, enable_prolific):
-    data = _create_prolific_experiment(client)
+def test_prolific_delete_handles_404(client: TestClient):
+    data = _create_experiment(client)
     experiment_id = data["id"]
 
     _mock_delete_study(status=404)
@@ -611,21 +605,3 @@ def test_prolific_delete_handles_404(client: TestClient, enable_prolific):
     resp = client.delete(f"/api/admin/experiments/{experiment_id}")
 
     assert resp.status_code == 200
-
-
-def test_platform_status_reflects_prolific_enabled(client: TestClient, enable_prolific):
-    resp = client.get("/api/admin/platform-status")
-    assert resp.status_code == 200
-    assert resp.json()["prolific_enabled"] is True
-
-
-def test_platform_status_disabled_by_default(client: TestClient):
-    settings = get_settings()
-    original = settings.prolific.api_token
-    settings.prolific.api_token = ""
-    try:
-        resp = client.get("/api/admin/platform-status")
-        assert resp.status_code == 200
-        assert resp.json()["prolific_enabled"] is False
-    finally:
-        settings.prolific.api_token = original

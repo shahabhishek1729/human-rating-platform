@@ -92,13 +92,8 @@ export interface ProlificStudyConfig {
   device_compatibility: string[];
 }
 
-export interface PlatformStatus {
-  prolific_enabled: boolean;
-}
-
 export interface ExperimentCreate {
   name: string;
   num_ratings_per_question: number;
-  prolific_completion_url: string;
-  prolific?: ProlificStudyConfig;
+  prolific: ProlificStudyConfig;
 }

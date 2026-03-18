@@ -55,6 +55,11 @@ def backdate_rater_session(sync_engine):
 
 @pytest.fixture
 def client():
+    settings = get_settings()
+    original_token = settings.prolific.api_token
+    if not settings.prolific.api_token:
+        settings.prolific.api_token = "test-token"
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
+    settings.prolific.api_token = original_token

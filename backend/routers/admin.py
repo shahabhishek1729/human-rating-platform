@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from database import get_session
-from schemas import ExperimentCreate, ExperimentResponse, PlatformStatus
+from schemas import ExperimentCreate, ExperimentResponse
 from services import admin as admin_service
 from auth import require_admin, get_admin_manager
 from services.authn import verify_clerk_token_and_get_email
@@ -61,12 +61,6 @@ async def admin_logout(manager=Depends(get_admin_manager)):
     resp = JSONResponse({"ok": True})
     manager.clear_cookie(resp)
     return resp
-
-
-@router.get("/platform-status", response_model=PlatformStatus)
-async def get_platform_status():
-    settings = get_settings()
-    return PlatformStatus(prolific_enabled=settings.prolific.enabled)
 
 
 @secure_router.post("/experiments", response_model=ExperimentResponse)

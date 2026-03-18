@@ -29,74 +29,63 @@ async def create_experiment(
 ) -> ExperimentResponse:
     settings = get_settings()
 
-    # Prolific auto-create path
-    if settings.prolific.enabled and payload.prolific is not None:
-        completion_code = generate_completion_code()
-        completion_url = build_completion_url(completion_code)
-
-        db_experiment = Experiment(
-            name=payload.name,
-            num_ratings_per_question=payload.num_ratings_per_question,
-            prolific_completion_url=completion_url,
-            prolific_completion_code=completion_code,
-        )
-        db.add(db_experiment)
-        await db.flush()  # assigns ID without committing
-
-        # Build the external study URL with Prolific placeholders
-        external_study_url = (
-            f"{settings.app.site_url}/rate"
-            f"?experiment_id={db_experiment.id}"
-            f"&PROLIFIC_PID={{{{%PROLIFIC_PID%}}}}"
-            f"&STUDY_ID={{{{%STUDY_ID%}}}}"
-            f"&SESSION_ID={{{{%SESSION_ID%}}}}"
+    if not settings.prolific.api_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Prolific API token is not configured. Set PROLIFIC__API_TOKEN to create experiments.",
         )
 
-        try:
-            result = await create_study(
-                settings=settings.prolific,
-                name=payload.name,
-                description=payload.prolific.description,
-                external_study_url=external_study_url,
-                estimated_completion_time=payload.prolific.estimated_completion_time,
-                reward=payload.prolific.reward,
-                total_available_places=payload.prolific.total_available_places,
-                completion_code=completion_code,
-                device_compatibility=payload.prolific.device_compatibility,
-            )
-        except Exception:
-            await db.rollback()
-            logger.exception("Failed to create Prolific study for experiment '%s'", payload.name)
-            raise HTTPException(
-                status_code=502,
-                detail="Failed to create study on Prolific. Please check your API token and try again.",
-            )
+    completion_code = generate_completion_code()
+    completion_url = build_completion_url(completion_code)
 
-        db_experiment.prolific_study_id = result["id"]
-        db_experiment.prolific_study_status = ProlificStudyStatus(
-            result.get("status", "UNPUBLISHED")
-        )
-        await db.commit()
-        await db.refresh(db_experiment)
-
-        logger.info(
-            "Created experiment id=%s with Prolific study_id=%s",
-            db_experiment.id,
-            result["id"],
-        )
-        return build_experiment_response(db_experiment, question_count=0, rating_count=0)
-
-    # Manual path (unchanged)
     db_experiment = Experiment(
         name=payload.name,
         num_ratings_per_question=payload.num_ratings_per_question,
-        prolific_completion_url=payload.prolific_completion_url,
+        prolific_completion_url=completion_url,
+        prolific_completion_code=completion_code,
     )
     db.add(db_experiment)
+    await db.flush()  # assigns ID without committing
+
+    # Build the external study URL with Prolific placeholders
+    external_study_url = (
+        f"{settings.app.site_url}/rate"
+        f"?experiment_id={db_experiment.id}"
+        f"&PROLIFIC_PID={{{{%PROLIFIC_PID%}}}}"
+        f"&STUDY_ID={{{{%STUDY_ID%}}}}"
+        f"&SESSION_ID={{{{%SESSION_ID%}}}}"
+    )
+
+    try:
+        result = await create_study(
+            settings=settings.prolific,
+            name=payload.name,
+            description=payload.prolific.description,
+            external_study_url=external_study_url,
+            estimated_completion_time=payload.prolific.estimated_completion_time,
+            reward=payload.prolific.reward,
+            total_available_places=payload.prolific.total_available_places,
+            completion_code=completion_code,
+            device_compatibility=payload.prolific.device_compatibility,
+        )
+    except Exception:
+        await db.rollback()
+        logger.exception("Failed to create Prolific study for experiment '%s'", payload.name)
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to create study on Prolific. Please check your API token and try again.",
+        )
+
+    db_experiment.prolific_study_id = result["id"]
+    db_experiment.prolific_study_status = ProlificStudyStatus(result.get("status", "UNPUBLISHED"))
     await db.commit()
     await db.refresh(db_experiment)
 
-    logger.info("Created experiment: id=%s, name=%s", db_experiment.id, db_experiment.name)
+    logger.info(
+        "Created experiment id=%s with Prolific study_id=%s",
+        db_experiment.id,
+        result["id"],
+    )
     return build_experiment_response(db_experiment, question_count=0, rating_count=0)
 
 
@@ -153,15 +142,14 @@ async def delete_experiment(
     experiment_id: int,
     db: AsyncSession,
 ) -> dict[str, str]:
-    settings = get_settings()
     experiment = await fetch_experiment_or_404(experiment_id, db)
     experiment_name = experiment.name
 
     # Clean up Prolific study if one exists
-    if settings.prolific.enabled and experiment.prolific_study_id:
+    if experiment.prolific_study_id:
         try:
             await delete_study(
-                settings=settings.prolific,
+                settings=get_settings().prolific,
                 study_id=experiment.prolific_study_id,
             )
             logger.info("Deleted Prolific study: %s", experiment.prolific_study_id)
@@ -183,9 +171,6 @@ async def publish_prolific_study(
     db: AsyncSession,
 ) -> dict[str, str]:
     settings = get_settings()
-    if not settings.prolific.enabled:
-        raise HTTPException(status_code=400, detail="Prolific integration is not enabled")
-
     experiment = await fetch_experiment_or_404(experiment_id, db)
     if not experiment.prolific_study_id:
         raise HTTPException(status_code=400, detail="This experiment has no linked Prolific study")

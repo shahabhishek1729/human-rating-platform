@@ -92,16 +92,11 @@ class SeedingSettings(_StrictModel):
     experiment_name: str = "Seed - Local Baseline"
     question_count: int = Field(default=50, ge=1)
     num_ratings_per_question: int = Field(default=3, ge=1)
-    prolific_completion_url: str | None = None
 
 
 class ProlificSettings(_StrictModel):
     api_token: str = ""
     base_url: str = "https://api.prolific.com/api/v1"
-
-    @property
-    def enabled(self) -> bool:
-        return bool(self.api_token)
 
 
 class Settings(BaseSettings):

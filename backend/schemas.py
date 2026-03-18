@@ -17,16 +17,11 @@ class ProlificStudyConfig(BaseModel):
     )
 
 
-class PlatformStatus(BaseModel):
-    prolific_enabled: bool
-
-
 # Experiment schemas
 class ExperimentCreate(BaseModel):
     name: str
     num_ratings_per_question: int = 3
-    prolific_completion_url: Optional[str] = None
-    prolific: Optional[ProlificStudyConfig] = None
+    prolific: ProlificStudyConfig
 
 
 class ExperimentResponse(BaseModel):

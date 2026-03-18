@@ -16,8 +16,6 @@ enabled = false
 experiment_name = "Seed - Local Baseline"
 question_count = 50
 num_ratings_per_question = 3
-prolific_completion_url = ""
 
 [prolific]
-api_token = ""
 base_url = "https://api.prolific.com/api/v1"
