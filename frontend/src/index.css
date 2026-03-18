@@ -213,3 +213,128 @@ input[type="range"] {
   color: #27ae60;
   font-size: 32px;
 }
+
+/* ── Login page ──────────────────────────────────────────────────────────── */
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.login-card {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.login-subtitle {
+  color: #666;
+  margin-bottom: 28px;
+  font-size: 15px;
+}
+
+.login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.login-btn-google {
+  background: white;
+  color: #333;
+  border: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-btn-google:hover {
+  background: #f8f8f8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.login-btn-email {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.login-btn-email:hover {
+  background: #eee;
+}
+
+.login-btn-primary {
+  background: #4a90d9;
+  color: white;
+}
+
+.login-btn-primary:hover {
+  background: #357abd;
+}
+
+.login-btn-primary:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.login-btn-link {
+  background: none;
+  color: #4a90d9;
+  font-size: 14px;
+  margin-top: 12px;
+  padding: 8px;
+}
+
+.login-btn-link:hover {
+  background: none;
+  text-decoration: underline;
+}
+
+.login-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+.login-error {
+  color: #c00;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+/* Hide Clerk's development mode banner and footer branding */
+.cl-internal-b3fm6y,
+.cl-userButtonPopoverFooter {
+  display: none !important;
+}
