@@ -32,6 +32,7 @@ export function ChatInterface({
   const [isRestoring, setIsRestoring] = useState(true);
   const [isDone, setIsDone] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasUserMessage = messages.some((message) => message.role === "user");
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +106,9 @@ export function ChatInterface({
   };
 
   const handleDone = () => {
+    if (!hasUserMessage || isLoading || isRestoring) {
+      return;
+    }
     setIsDone(true);
     onComplete();
   };
@@ -188,10 +192,16 @@ export function ChatInterface({
         <button
           type="button"
           onClick={handleDone}
-          className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
+          disabled={!hasUserMessage || isLoading || isRestoring}
+          className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
         >
           I'm done — submit and finish
         </button>
+        {!hasUserMessage && !isRestoring && (
+          <p className="text-sm text-orange-600 text-center">
+            Send at least one message before finishing.
+          </p>
+        )}
       </form>
     </div>
   );
