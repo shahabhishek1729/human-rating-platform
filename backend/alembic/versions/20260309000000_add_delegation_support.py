@@ -57,6 +57,9 @@ def upgrade() -> None:
         sa.Column("condition", sa.String(16), nullable=False),
         sa.Column("interaction_type", sa.String(32), nullable=False),
         sa.Column("payload", sa.Text, nullable=False),
+        sa.UniqueConstraint(
+            "prolific_pid", "task_id", "condition", name="uq_interaction_log"
+        ),
     )
 
 

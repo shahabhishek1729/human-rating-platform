@@ -60,8 +60,8 @@ class Experiment(SQLModel, table=True):
             server_default=text("CURRENT_TIMESTAMP"),
         ),
     )
-    experiment_type: str = Field(
-        default="rating",
+    experiment_type: ExperimentType = Field(
+        default=ExperimentType.RATING,
         sa_column=Column(String(16), nullable=False, server_default=text("'rating'")),
     )
     num_ratings_per_question: int = Field(

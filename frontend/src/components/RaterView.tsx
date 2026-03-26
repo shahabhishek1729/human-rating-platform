@@ -309,17 +309,6 @@ function RaterView() {
     );
   }
 
-  if (session.experiment_type !== 'rating') {
-    return (
-      <DelegationView
-        session={session}
-        experimentId={experimentId!}
-        prolificId={prolificId!}
-        onComplete={() => setAllDone(true)}
-      />
-    );
-  }
-
   return (
     <div style={styles.container}>
       {isPreview && (
@@ -344,11 +333,19 @@ function RaterView() {
           <span style={styles.progressCount}>{questionsCompleted}</span>
         </div>
       </div>
-
-      {question && (
-        <QuestionCard
-          question={question}
-          onSubmit={handleSubmit}
+      {session.experiment_type === 'rating' ? (
+        question && (
+          <QuestionCard
+            question={question}
+            onSubmit={handleSubmit}
+          />
+        )
+      ) : (
+        <DelegationView
+          session={session}
+          experimentId={experimentId!}
+          prolificId={prolificId!}
+          onComplete={() => setAllDone(true)}
         />
       )}
     </div>

@@ -91,6 +91,7 @@ function SubtaskCard({
 
 interface DelegationInterfaceProps {
   task: DelegationTask;
+  sessionToken: string;
   pid: string;
   experimentId: number;
   onComplete: () => void;
@@ -98,6 +99,7 @@ interface DelegationInterfaceProps {
 
 export function DelegationInterface({
   task,
+  sessionToken,
   pid,
   experimentId,
   onComplete,
@@ -128,7 +130,7 @@ export function DelegationInterface({
       for (const [k, v] of Object.entries(userInputs)) {
         stringInputs[String(k)] = v;
       }
-      await api.submitDelegation(pid, task.id, experimentId, stringInputs);
+      await api.submitDelegation(sessionToken, pid, task.id, experimentId, stringInputs);
       setSubmitted(true);
       onComplete();
     } catch {

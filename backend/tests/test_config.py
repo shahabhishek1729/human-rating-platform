@@ -62,3 +62,16 @@ def test_prolific_mode_rejects_fake(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValidationError, match="Input should be 'disabled' or 'real'"):
         Settings(_env_file=None)
+
+
+def test_llm_settings_accept_nested_env_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("LLM__API_KEY", "sk-test")
+    monkeypatch.setenv("LLM__BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("LLM__MODEL", "openai/gpt-4o-mini")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.llm.api_key == "sk-test"
+    assert settings.llm.base_url == "https://openrouter.ai/api/v1"
+    assert settings.llm.model == "openai/gpt-4o-mini"

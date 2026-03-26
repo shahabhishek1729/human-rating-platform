@@ -111,6 +111,12 @@ class ProlificSettings(_StrictModel):
         return self.mode != ProlificMode.DISABLED
 
 
+class LLMSettings(_StrictModel):
+    api_key: str = ""
+    base_url: str = "https://openrouter.ai/api/v1"
+    model: str = "openai/gpt-4o-mini"
+
+
 class Settings(BaseSettings):
     app: AppSettings = Field(default_factory=AppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -119,6 +125,7 @@ class Settings(BaseSettings):
     clerk: ClerkSettings = Field(default_factory=ClerkSettings)
     seeding: SeedingSettings = Field(default_factory=SeedingSettings)
     prolific: ProlificSettings = Field(default_factory=ProlificSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
 
     # Admin/session config (mapped from flat env vars for ergonomics)
     admin_auth_enabled: bool = Field(default=True)

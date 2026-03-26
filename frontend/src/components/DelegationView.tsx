@@ -26,7 +26,7 @@ function DelegationView({ session, experimentId, prolificId, onComplete }: Deleg
     }
 
     api
-      .getDelegationTask(session.delegation_task_id)
+      .getDelegationTask(session.delegation_task_id, session.rater_session_token)
       .then((data) => setTask(data))
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load task'))
       .finally(() => setLoading(false));
@@ -43,7 +43,7 @@ function DelegationView({ session, experimentId, prolificId, onComplete }: Deleg
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-600">
         <div className="text-gray-600">Loading task...</div>
       </div>
     );
@@ -51,7 +51,7 @@ function DelegationView({ session, experimentId, prolificId, onComplete }: Deleg
 
   if (error || !task) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white border border-red-200 rounded-xl p-10 text-center">
         <div className="text-red-600">{error || 'Task not found.'}</div>
       </div>
     );
@@ -61,6 +61,7 @@ function DelegationView({ session, experimentId, prolificId, onComplete }: Deleg
     session.experiment_type === 'delegation' ? (
       <DelegationInterface
         task={task}
+        sessionToken={session.rater_session_token}
         pid={prolificId}
         experimentId={Number(experimentId)}
         onComplete={handleComplete}
@@ -68,6 +69,7 @@ function DelegationView({ session, experimentId, prolificId, onComplete }: Deleg
     ) : (
       <ChatInterface
         task={task}
+        sessionToken={session.rater_session_token}
         pid={prolificId}
         experimentId={Number(experimentId)}
         onComplete={handleComplete}

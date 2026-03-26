@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from models import Question, SESSION_DURATION_MINUTES
+from models import ExperimentType, Question, SESSION_DURATION_MINUTES
 from schemas import QuestionResponse, RaterStartResponse
 
 
@@ -26,7 +26,7 @@ def build_rater_start_response(
     session_start: datetime,
     experiment_name: str,
     completion_url: str | None,
-    experiment_type: str = "rating",
+    experiment_type: ExperimentType = ExperimentType.RATING,
     delegation_task_id: str | None = None,
     rater_session_token: str,
 ) -> RaterStartResponse:

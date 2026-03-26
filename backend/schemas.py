@@ -4,7 +4,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from config import ProlificMode
-from models import ProlificStudyStatus
+from models import ExperimentType, ProlificStudyStatus
 
 
 # Delegation schemas
@@ -26,7 +26,7 @@ class DelegationTaskResponse(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 
@@ -39,6 +39,10 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     ai_message: str
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: list[ChatMessage]
 
 
 class DelegationSubmit(BaseModel):
@@ -107,7 +111,7 @@ class PlatformStatus(BaseModel):
 class ExperimentCreate(BaseModel):
     name: str
     num_ratings_per_question: int = 3
-    experiment_type: str = "rating"
+    experiment_type: ExperimentType = ExperimentType.RATING
     prolific_completion_url: Optional[str] = None
     prolific: Optional[ProlificStudyConfig] = None
 
@@ -117,7 +121,7 @@ class ExperimentResponse(BaseModel):
     name: str
     created_at: datetime
     num_ratings_per_question: int
-    experiment_type: str = "rating"
+    experiment_type: ExperimentType = ExperimentType.RATING
     prolific_completion_url: Optional[str] = None
     question_count: int = 0
     rating_count: int = 0
@@ -143,7 +147,7 @@ class RaterStartResponse(BaseModel):
     session_end_time: datetime
     experiment_name: str
     completion_url: Optional[str] = None
-    experiment_type: str = "rating"
+    experiment_type: ExperimentType = ExperimentType.RATING
     delegation_task_id: Optional[str] = None
     rater_session_token: str
 

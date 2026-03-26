@@ -1,29 +1,34 @@
-"""OpenAI API client for generating chat responses in delegation experiments."""
+"""Async LLM client for generating chat responses in delegation experiments."""
 from __future__ import annotations
 
 import logging
-import os
 
-from openai import OpenAI
+from openai import AsyncOpenAI
+
+from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_client: OpenAI | None = None
+_client: AsyncOpenAI | None = None
 
 
-def _get_client() -> OpenAI:
+def _get_client() -> AsyncOpenAI:
     global _client
     if _client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY not set in environment")
-        _client = OpenAI(api_key=api_key)
+        settings = get_settings()
+        if not settings.llm.api_key:
+            raise ValueError("LLM__API_KEY not set in configuration")
+        _client = AsyncOpenAI(
+            api_key=settings.llm.api_key,
+            base_url=settings.llm.base_url,
+        )
     return _client
 
 
-def get_chat_response(messages: list[dict], task_question: str, task_instructions: str) -> str:
-    """Get a chat response from OpenAI given conversation history and task context."""
+async def get_chat_response(messages: list[dict], task_question: str, task_instructions: str) -> str:
+    """Get a chat response from the configured LLM provider given task context."""
     client = _get_client()
+    settings = get_settings()
 
     system_message = (
         f"You are a helpful AI assistant helping a user answer a question.\n\n"
@@ -37,8 +42,8 @@ def get_chat_response(messages: list[dict], task_question: str, task_instruction
         api_messages.append({"role": msg["role"], "content": msg["content"]})
 
     logger.debug("Sending chat request with %d messages", len(api_messages))
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
+    response = await client.chat.completions.create(
+        model=settings.llm.model,
         messages=api_messages,
         max_completion_tokens=4096,
     )

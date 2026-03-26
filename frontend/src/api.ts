@@ -86,6 +86,7 @@ const routes = {
   },
   delegation: {
     task: (taskId: string) => `/delegation/task/${taskId}`,
+    chatHistory: '/delegation/chat-history',
     chat: '/delegation/chat',
     submit: '/delegation/submit',
   },
@@ -436,11 +437,20 @@ export const api = {
 
   // ── Delegation ───────────────────────────────────────────────────────────
 
-  async getDelegationTask(taskId: string): Promise<DelegationTask> {
-    return requestJson<DelegationTask>(routes.delegation.task(taskId));
+  async getDelegationTask(taskId: string, sessionToken: string): Promise<DelegationTask> {
+    return requestJson<DelegationTask>(routes.delegation.task(taskId), {
+      headers: { 'X-Rater-Session': sessionToken },
+    });
+  },
+
+  async getChatHistory(sessionToken: string): Promise<{ messages: ChatMessage[] }> {
+    return requestJson<{ messages: ChatMessage[] }>(routes.delegation.chatHistory, {
+      headers: { 'X-Rater-Session': sessionToken },
+    });
   },
 
   async sendChatMessage(
+    sessionToken: string,
     pid: string,
     taskId: string,
     experimentId: number,
@@ -448,11 +458,13 @@ export const api = {
   ): Promise<{ ai_message: string }> {
     return requestJson<{ ai_message: string }>(routes.delegation.chat, {
       method: 'POST',
+      headers: { 'X-Rater-Session': sessionToken },
       json: { pid, task_id: taskId, experiment_id: experimentId, message_history: messageHistory },
     });
   },
 
   async submitDelegation(
+    sessionToken: string,
     pid: string,
     taskId: string,
     experimentId: number,
@@ -460,6 +472,7 @@ export const api = {
   ): Promise<{ status: string; message: string }> {
     return requestJson<{ status: string; message: string }>(routes.delegation.submit, {
       method: 'POST',
+      headers: { 'X-Rater-Session': sessionToken },
       json: { pid, task_id: taskId, experiment_id: experimentId, subtask_inputs: subtaskInputs },
     });
   },
