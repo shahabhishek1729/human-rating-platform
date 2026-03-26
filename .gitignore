@@ -29,3 +29,5 @@ artifacts/
 
 # Local assistant/worktree artifacts
 .claude/
+
+backend/questions/questions_combined.json
