@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -10,7 +11,9 @@ from config import get_settings
 from models import Experiment, ExperimentRound, Question, Rating, Rater
 from schemas import ExperimentCreate, ExperimentResponse
 from .mappers import build_experiment_response
+from fastapi import HTTPException
 from .prolific import delete_study
+from services.assistance.registry import get_method
 from .queries import fetch_experiment_or_404, fetch_total_questions_for_experiment
 
 logger = logging.getLogger(__name__)
@@ -20,10 +23,19 @@ async def create_experiment(
     payload: ExperimentCreate,
     db: AsyncSession,
 ) -> ExperimentResponse:
+    try:
+        get_method(payload.assistance_method)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     db_experiment = Experiment(
         name=payload.name,
         num_ratings_per_question=payload.num_ratings_per_question,
         prolific_completion_url=payload.prolific_completion_url,
+        assistance_method=payload.assistance_method,
+        assistance_params=json.dumps(payload.assistance_params)
+        if payload.assistance_params
+        else None,
     )
     db.add(db_experiment)
     await db.commit()

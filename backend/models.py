@@ -39,6 +39,15 @@ class ProlificStudyStatus(str, Enum):
     COMPLETED = "COMPLETED"
 
 
+class StepType(str, Enum):
+    """Assistance interaction step types."""
+
+    NONE = "none"  # method produced no assistance (terminal)
+    DISPLAY = "display"  # show static content to the rater (terminal)
+    ASK_INPUT = "ask_input"  # ask the rater a sub-question, then call advance()
+    COMPLETE = "complete"  # multi-turn interaction finished, show final result (terminal)
+
+
 class Experiment(SQLModel, table=True):
     __tablename__ = "experiments"
 
@@ -60,6 +69,14 @@ class Experiment(SQLModel, table=True):
         default=None,
         sa_column=Column(String(2048), nullable=True),
     )
+    assistance_method: str = Field(
+        default="none",
+        sa_column=Column(String(64), nullable=False, server_default=text("'none'")),
+    )
+    assistance_params: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )  # JSON-encoded method-specific parameters
 
 
 class Question(SQLModel, table=True):
@@ -158,6 +175,14 @@ class Rating(SQLModel, table=True):
             nullable=False,
         )
     )
+    assistance_session_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("assistance_sessions.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+    )
     answer: str = Field(sa_column=Column(Text, nullable=False))
     confidence: int = Field(sa_column=Column(Integer, nullable=False))
     time_started: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
@@ -234,3 +259,73 @@ class Upload(SQLModel, table=True):
         ),
     )
     question_count: int = Field(sa_column=Column(Integer, nullable=False))
+
+
+class AssistanceSession(SQLModel, table=True):
+    """Tracks the state of a multi-turn assistance interaction for a rater/question pair."""
+
+    __tablename__ = "assistance_sessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "rater_id",
+            "question_id",
+            name="uq_assistance_session_rater_question",
+        ),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    rater_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("raters.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    experiment_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("experiments.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    question_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("questions.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    method_name: str = Field(sa_column=Column(String(64), nullable=False))
+    params: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )  # JSON-encoded snapshot of experiment.assistance_params at session creation
+    step_type: str = Field(sa_column=Column(String(32), nullable=False))
+    state: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )  # JSON-encoded backend-only state passed to advance() between turns
+    payload: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )  # JSON-encoded last payload sent to frontend (used to restore UI on resume)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    is_complete: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=text("false")),
+    )

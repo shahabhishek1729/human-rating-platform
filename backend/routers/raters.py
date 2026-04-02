@@ -5,17 +5,21 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import Settings, get_settings
 from database import get_session
-from config import get_settings, Settings
 from schemas import (
+    AssistanceAdvanceRequest,
+    AssistanceStartRequest,
+    AssistanceStepResponse,
     QuestionResponse,
     RaterStartResponse,
     RatingResponse,
     RatingSubmit,
     SessionStatusResponse,
 )
-from services import rater
-from .deps import require_rater_session, RaterSession
+from services import assistance, rater
+
+from .deps import RaterSession, require_rater_session
 
 router = APIRouter(prefix="/raters", tags=["raters"])
 
@@ -72,3 +76,30 @@ async def end_session(
     db: AsyncSession = Depends(get_session),
 ):
     return await rater.end_session(rater_id=session.rater_id, db=db)
+
+
+@router.post("/assistance/start", response_model=AssistanceStepResponse)
+async def start_assistance(
+    body: AssistanceStartRequest,
+    session: RaterSession = Depends(require_rater_session),
+    db: AsyncSession = Depends(get_session),
+):
+    return await assistance.start_assistance(
+        rater_id=session.rater_id,
+        question_id=body.question_id,
+        db=db,
+    )
+
+
+@router.post("/assistance/advance", response_model=AssistanceStepResponse)
+async def advance_assistance(
+    body: AssistanceAdvanceRequest,
+    session: RaterSession = Depends(require_rater_session),
+    db: AsyncSession = Depends(get_session),
+):
+    return await assistance.advance_assistance(
+        rater_id=session.rater_id,
+        session_id=body.session_id,
+        human_input=body.human_input,
+        db=db,
+    )

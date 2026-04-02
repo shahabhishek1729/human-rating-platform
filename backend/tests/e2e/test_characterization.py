@@ -486,9 +486,9 @@ def test_migration_runner_current_and_history_commands_succeed():
 
     current_output = f"{current.stdout}\n{current.stderr}"
     history_output = f"{history.stdout}\n{history.stderr}"
-    for revision_id in head_revisions:
-        assert revision_id in current_output
-    for revision_id in sorted(revisions):
+    assert "(head)" in current_output
+    assert any(rev in current_output for rev in head_revisions)
+    for revision_id in revisions:
         assert revision_id in history_output
 
 

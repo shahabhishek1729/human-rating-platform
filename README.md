@@ -17,7 +17,8 @@ PostgreSQL stores everything. Alembic manages schema migrations.
 ```text
 backend/              FastAPI app, models, services, migrations, tests
   routers/            API route handlers (admin, raters)
-  services/           Business logic (admin/, rater/)
+  services/           Business logic (admin/, rater/, assistance/)
+    assistance/       Assistance method plugin system (base, registry, operations, methods/)
   alembic/            Migration config + versions
   scripts/            migrate.sh, predeploy.sh, seed_dev.py, config_check.py
   config.toml         Default local settings
@@ -188,7 +189,7 @@ make db.down     # rollback one revision (or set MIGRATION_REVISION=...)
 make db.new MIGRATION_NAME=add_new_column
 make db.reset    # destructive: wipe + rebuild from migrations
 make db.clear    # destructive: wipe local postgres volume
-make db.seed     # seed local data (disabled by default, see config.toml [seeding])
+make db.seed     # seed local data (disabled by default, see config.toml [seeding]; calls Prolific API in real mode)
 ```
 
 ---
@@ -433,6 +434,34 @@ q2,"Explain photosynthesis","Plants convert sunlight...",,FT
 
 ---
 
+## Assistance Methods
+
+Experiments can be configured with an assistance method to provide raters with AI- or human-generated help while they rate questions. The method is set per-experiment via two fields:
+
+- `assistance_method` — the method name (e.g. `"none"`, `"human_as_tool"`); defaults to `"none"`
+- `assistance_params` — JSON-encoded method-specific configuration
+
+### How it works
+
+When a rater opens a question, the frontend calls `POST /api/raters/assistance/start` with the `question_id`. The backend starts an `AssistanceSession` by invoking the configured method's `start()` implementation, which returns an `InteractionStep`. The step has a `type` that tells the frontend what to render:
+
+| `type` | Meaning |
+| --- | --- |
+| `none` | No assistance available for this question (terminal) |
+| `display` | Show static content to the rater (terminal) |
+| `ask_input` | Ask the rater a sub-question; call `/assistance/advance` with their answer |
+| `complete` | Multi-turn interaction finished; show final result (terminal) |
+
+For multi-turn methods (`ask_input`), the frontend collects the rater's response and calls `POST /api/raters/assistance/advance` with `session_id` and `human_input`. This repeats until a terminal step type is returned.
+
+When the rater submits their rating, they can include the `assistance_session_id` to link the rating to the assistance session for analytics.
+
+### Adding a new method
+
+Create a class in `backend/services/assistance/methods/` that subclasses `AssistanceMethod` and implements `start()` and `advance()`, then register it in the registry. The `none` method in `methods/none.py` is the minimal reference implementation.
+
+---
+
 ## Prolific Integration
 
 The Prolific integration has two explicit modes controlled by `PROLIFIC__MODE`.
@@ -443,7 +472,7 @@ Set `PROLIFIC__MODE=disabled` to hide the Prolific round workflow entirely. This
 
 ### Real
 
-Set `PROLIFIC__MODE=real` and provide `PROLIFIC__API_TOKEN` to use the real Prolific API. In this mode, the platform creates, publishes, and deletes studies on Prolific.
+Set `PROLIFIC__MODE=real` and provide `PROLIFIC__API_TOKEN` to use the real Prolific API. In this mode, the platform creates, publishes, and deletes studies on Prolific. The backend will refuse to start if `PROLIFIC__API_TOKEN` is missing when `PROLIFIC__MODE=real`.
 
 Typical workflow:
 
@@ -496,6 +525,8 @@ Interactive Swagger docs are available at `/docs` when the backend is running.
 - `POST /api/raters/submit` — submit a rating
 - `GET /api/raters/session-status` — check session status
 - `POST /api/raters/end-session` — end session
+- `POST /api/raters/assistance/start` — start an assistance session for a question; returns an `AssistanceStepResponse` with `session_id`, `type`, and `content`
+- `POST /api/raters/assistance/advance` — advance a multi-turn assistance session; body: `{ session_id, human_input }`
 
 Auth and session flow:
 - Start requires `experiment_id`, `PROLIFIC_PID`, `STUDY_ID`, and `SESSION_ID`. Preview links should include placeholders for `STUDY_ID`/`SESSION_ID`.

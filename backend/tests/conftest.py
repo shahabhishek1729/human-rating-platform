@@ -57,9 +57,12 @@ def backdate_rater_session(sync_engine):
 def client():
     settings = get_settings()
     original_token = settings.prolific.api_token
+    original_admin_auth = settings.admin_auth_enabled
     if not settings.prolific.api_token:
         settings.prolific.api_token = "test-token"
+    settings.admin_auth_enabled = False
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
     settings.prolific.api_token = original_token
+    settings.admin_auth_enabled = original_admin_auth

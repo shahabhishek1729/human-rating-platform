@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Experiment, Question, Rating, Rater
-
-
-async def fetch_experiment_or_404(experiment_id: int, db: AsyncSession) -> Experiment:
-    experiment = (
-        await db.execute(select(Experiment).where(Experiment.id == experiment_id))
-    ).scalar_one_or_none()
-    if not experiment:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    return experiment
+from models import Question, Rating, Rater
+from services.queries import fetch_experiment_or_404  # noqa: F401 — re-exported for backwards compat
 
 
 async def fetch_ratings_for_experiment(
