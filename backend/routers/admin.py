@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, HTTPException, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import get_settings
+from config import Settings, get_settings
 from database import get_session
 from schemas import (
     ExperimentRoundCreate,
+    ExperimentDocumentResponse,
     ExperimentRoundResponse,
     ExperimentCreate,
     ExperimentResponse,
@@ -17,6 +18,7 @@ from schemas import (
 )
 from services import admin as admin_service
 from auth import require_admin, get_admin_manager
+from services.documents import list_experiment_documents, upload_experiment_document
 from services.authn import verify_clerk_token_and_get_email
 
 # Public admin router (for auth endpoints)
@@ -131,6 +133,32 @@ async def list_uploads(
         limit=limit,
         db=db,
     )
+
+
+@secure_router.post("/experiments/{experiment_id}/documents/upload")
+async def upload_document(
+    experiment_id: int,
+    file: UploadFile = File(...),
+    settings: Settings = Depends(get_settings),
+    db: AsyncSession = Depends(get_session),
+):
+    return await upload_experiment_document(
+        experiment_id=experiment_id,
+        file=file,
+        db=db,
+        settings=settings,
+    )
+
+
+@secure_router.get(
+    "/experiments/{experiment_id}/documents",
+    response_model=list[ExperimentDocumentResponse],
+)
+async def list_documents(
+    experiment_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    return await list_experiment_documents(experiment_id=experiment_id, db=db)
 
 
 @secure_router.get("/experiments/{experiment_id}/export")

@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Experiment, Question, Rater
+from models import Experiment, ExperimentDocument, Question, Rater
 
 
 async def fetch_experiment_or_404(experiment_id: int, db: AsyncSession) -> Experiment:
@@ -36,3 +36,12 @@ async def fetch_question_or_404(question_id: int, db: AsyncSession) -> Question:
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
     return question
+
+
+async def fetch_experiment_document_or_404(document_id: int, db: AsyncSession) -> ExperimentDocument:
+    document = (
+        await db.execute(select(ExperimentDocument).where(ExperimentDocument.id == document_id))
+    ).scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document

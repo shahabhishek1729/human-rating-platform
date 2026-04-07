@@ -304,6 +304,73 @@ class Upload(SQLModel, table=True):
     question_count: int = Field(sa_column=Column(Integer, nullable=False))
 
 
+class ExperimentDocument(SQLModel, table=True):
+    __tablename__ = "experiment_documents"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    experiment_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("experiments.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    title: str = Field(sa_column=Column(String(255), nullable=False))
+    source_filename: str = Field(sa_column=Column(String(512), nullable=False))
+    content_type: str = Field(sa_column=Column(String(128), nullable=False))
+    chunk_count: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default=text("0")),
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+
+
+class ExperimentDocumentChunk(SQLModel, table=True):
+    __tablename__ = "experiment_document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "chunk_index",
+            name="uq_experiment_document_chunk_index",
+        ),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    document_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("experiment_documents.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    experiment_id: int = Field(
+        sa_column=Column(
+            Integer,
+            ForeignKey("experiments.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    chunk_index: int = Field(sa_column=Column(Integer, nullable=False))
+    text: str = Field(sa_column=Column(Text, nullable=False))
+    char_start: int = Field(sa_column=Column(Integer, nullable=False))
+    char_end: int = Field(sa_column=Column(Integer, nullable=False))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC),
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+
+
 class AssistanceSession(SQLModel, table=True):
     """Tracks the state of a multi-turn assistance interaction for a rater/question pair."""
 

@@ -9,6 +9,9 @@ from config import Settings, get_settings
 from database import get_session
 from schemas import (
     AssistanceAdvanceRequest,
+    ExperimentDocumentPageResponse,
+    ExperimentDocumentResponse,
+    ExperimentDocumentSearchResponse,
     AssistanceStartRequest,
     AssistanceStepResponse,
     QuestionResponse,
@@ -18,6 +21,11 @@ from schemas import (
     SessionStatusResponse,
 )
 from services import assistance, rater
+from services.documents import (
+    get_document_page_for_rater,
+    list_documents_for_rater,
+    search_documents_for_rater,
+)
 
 from .deps import RaterSession, require_rater_session
 
@@ -60,6 +68,63 @@ async def submit_rating(
     db: AsyncSession = Depends(get_session),
 ):
     return await rater.submit_rating(payload=rating, rater_id=session.rater_id, db=db)
+
+
+@router.get("/documents", response_model=list[ExperimentDocumentResponse])
+async def list_documents(
+    question_id: int = Query(...),
+    session: RaterSession = Depends(require_rater_session),
+    db: AsyncSession = Depends(get_session),
+):
+    return await list_documents_for_rater(
+        rater_id=session.rater_id,
+        question_id=question_id,
+        db=db,
+    )
+
+
+@router.get("/documents/{document_id}/page", response_model=ExperimentDocumentPageResponse)
+async def get_document_page(
+    document_id: int,
+    question_id: int = Query(...),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(8, ge=1, le=50),
+    settings: Settings = Depends(get_settings),
+    session: RaterSession = Depends(require_rater_session),
+    db: AsyncSession = Depends(get_session),
+):
+    return await get_document_page_for_rater(
+        rater_id=session.rater_id,
+        question_id=question_id,
+        document_id=document_id,
+        page=page,
+        page_size=page_size,
+        db=db,
+        settings=settings,
+    )
+
+
+@router.get("/documents/search", response_model=ExperimentDocumentSearchResponse)
+async def search_documents(
+    question_id: int = Query(...),
+    document_id: int | None = Query(None),
+    q: str = Query(..., min_length=1),
+    mode: str = Query("hybrid"),
+    limit: int = Query(8, ge=1, le=25),
+    settings: Settings = Depends(get_settings),
+    session: RaterSession = Depends(require_rater_session),
+    db: AsyncSession = Depends(get_session),
+):
+    return await search_documents_for_rater(
+        rater_id=session.rater_id,
+        question_id=question_id,
+        document_id=document_id,
+        query=q,
+        mode=mode,
+        limit=limit,
+        db=db,
+        settings=settings,
+    )
 
 
 @router.get("/session-status", response_model=SessionStatusResponse)

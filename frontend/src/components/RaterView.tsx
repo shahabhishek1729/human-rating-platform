@@ -337,6 +337,7 @@ function RaterView() {
         question && (
           <QuestionCard
             question={question}
+            sessionToken={session.rater_session_token}
             onSubmit={handleSubmit}
           />
         )

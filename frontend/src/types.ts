@@ -35,6 +35,49 @@ export interface Upload {
   question_count: number;
 }
 
+export interface ExperimentDocument {
+  id: number;
+  title: string;
+  source_filename: string;
+  chunk_count: number;
+  created_at: string;
+}
+
+export interface ExperimentDocumentChunk {
+  id: number;
+  chunk_index: number;
+  text: string;
+  char_start: number;
+  char_end: number;
+}
+
+export interface ExperimentDocumentPage {
+  document_id: number;
+  title: string;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  total_chunks: number;
+  chunks: ExperimentDocumentChunk[];
+}
+
+export interface ExperimentDocumentSearchResult {
+  chunk_id: number;
+  document_id: number;
+  document_title: string;
+  chunk_index: number;
+  score: number;
+  text: string;
+  char_start: number;
+  char_end: number;
+}
+
+export interface ExperimentDocumentSearchResponse {
+  query: string;
+  mode: 'lexical' | 'semantic' | 'hybrid';
+  results: ExperimentDocumentSearchResult[];
+}
+
 export interface Session {
   rater_id: number;
   session_start: string;

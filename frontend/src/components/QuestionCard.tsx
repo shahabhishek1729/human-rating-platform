@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import DocumentSearchPanel from './DocumentSearchPanel';
 import type { Question } from '../types';
 
 interface QuestionCardProps {
   question: Question;
+  sessionToken: string;
   onSubmit: (answer: string, confidence: number, timeStarted: string) => Promise<void>;
 }
 
-function QuestionCard({ question, onSubmit }: QuestionCardProps) {
+function QuestionCard({ question, sessionToken, onSubmit }: QuestionCardProps) {
   const [selectedAnswer, setSelectedAnswer] = useState('');
   const [freeTextAnswer, setFreeTextAnswer] = useState('');
   const [confidence, setConfidence] = useState(3);
@@ -218,6 +220,8 @@ function QuestionCard({ question, onSubmit }: QuestionCardProps) {
       >
         {submitting ? 'Submitting...' : 'Submit Answer'}
       </button>
+
+      <DocumentSearchPanel question={question} sessionToken={sessionToken} />
     </div>
   );
 }

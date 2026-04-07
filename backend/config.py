@@ -117,6 +117,21 @@ class LLMSettings(_StrictModel):
     model: str = "openai/gpt-4o-mini"
 
 
+class EmbeddingsSettings(_StrictModel):
+    api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "text-embedding-3-small"
+    vector_size: int = Field(default=1536, ge=1)
+
+
+class VectorStoreSettings(_StrictModel):
+    url: str = "http://qdrant:6333"
+    collection_prefix: str = "hrp_docs"
+    chunk_size_chars: int = Field(default=3500, ge=500)
+    chunk_overlap_chars: int = Field(default=400, ge=0)
+    browse_page_size_chunks: int = Field(default=8, ge=1, le=100)
+
+
 class Settings(BaseSettings):
     app: AppSettings = Field(default_factory=AppSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -126,6 +141,8 @@ class Settings(BaseSettings):
     seeding: SeedingSettings = Field(default_factory=SeedingSettings)
     prolific: ProlificSettings = Field(default_factory=ProlificSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
+    vector_store: VectorStoreSettings = Field(default_factory=VectorStoreSettings)
 
     # Admin/session config (mapped from flat env vars for ergonomics)
     admin_auth_enabled: bool = Field(default=True)

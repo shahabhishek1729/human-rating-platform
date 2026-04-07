@@ -45,6 +45,51 @@ class ChatHistoryResponse(BaseModel):
     messages: list[ChatMessage]
 
 
+class ExperimentDocumentResponse(BaseModel):
+    id: int
+    title: str
+    source_filename: str
+    chunk_count: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExperimentDocumentChunkResponse(BaseModel):
+    id: int
+    chunk_index: int
+    text: str
+    char_start: int
+    char_end: int
+
+
+class ExperimentDocumentPageResponse(BaseModel):
+    document_id: int
+    title: str
+    page: int
+    page_size: int
+    total_pages: int
+    total_chunks: int
+    chunks: list[ExperimentDocumentChunkResponse]
+
+
+class ExperimentDocumentSearchResult(BaseModel):
+    chunk_id: int
+    document_id: int
+    document_title: str
+    chunk_index: int
+    score: float
+    text: str
+    char_start: int
+    char_end: int
+
+
+class ExperimentDocumentSearchResponse(BaseModel):
+    query: str
+    mode: Literal["lexical", "semantic", "hybrid"]
+    results: list[ExperimentDocumentSearchResult]
+
+
 class DelegationSubmit(BaseModel):
     pid: str
     task_id: str

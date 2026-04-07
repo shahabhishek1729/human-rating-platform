@@ -3,6 +3,7 @@ import { api } from '../api';
 import Analytics from './Analytics';
 import type {
   Experiment,
+  ExperimentDocument,
   ExperimentRound,
   ExperimentStats,
   PilotStudyCreate,
@@ -27,9 +28,11 @@ interface AssistanceMethods {
 function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: ExperimentDetailProps) {
   const [stats, setStats] = useState<ExperimentStats | null>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [documents, setDocuments] = useState<ExperimentDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [includePreview, setIncludePreview] = useState(false);
   const [publishingRoundId, setPublishingRoundId] = useState<number | null>(null);
@@ -86,6 +89,16 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
     }
   }, [experiment.id]);
 
+  const loadDocuments = useCallback(async () => {
+    try {
+      const data = await api.listDocuments(experiment.id);
+      setDocuments(data);
+    } catch (err) {
+      setDocuments([]);
+      setError(err instanceof Error ? err.message : 'Failed to load documents');
+    }
+  }, [experiment.id]);
+
   const loadRounds = useCallback(async () => {
     try {
       const data = await api.listExperimentRounds(experiment.id);
@@ -108,6 +121,7 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
   useEffect(() => {
     loadStats();
     loadUploads();
+    loadDocuments();
     api.getPlatformStatus()
       .then((s) => {
         setProlificMode(s.prolific_mode);
@@ -117,7 +131,7 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
         setProlificMode('disabled');
         setPlatformStatusMessage('Unable to load platform status. Assuming Prolific is disabled.');
       });
-  }, [loadStats, loadUploads]);
+  }, [loadStats, loadUploads, loadDocuments]);
 
   useEffect(() => {
     if (prolificMode === 'real') {
@@ -165,6 +179,24 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       }
+    }
+  };
+
+  const handleDocumentUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!documentFile) return;
+
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await api.uploadDocument(experiment.id, documentFile);
+      setSuccess(result.message);
+      setDocumentFile(null);
+      (e.target as HTMLFormElement).reset();
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
@@ -922,6 +954,52 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
                   }}
                 >
                   Upload CSV
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>
+              <h2 style={styles.sectionTitle}>Context Documents</h2>
+            </div>
+            <div style={styles.sectionBody}>
+              {documents.length > 0 && (
+                <div style={styles.uploadList}>
+                  {documents.map((document) => (
+                    <div key={document.id} style={styles.uploadItem}>
+                      <span style={{ fontFamily: 'monospace' }}>{document.source_filename}</span>
+                      <span style={{ color: '#666' }}>{document.chunk_count} chunks</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleDocumentUpload}>
+                <div style={styles.inputGroup}>
+                  <label htmlFor="upload-document" style={styles.label}>Add Context Document</label>
+                  <input
+                    id="upload-document"
+                    type="file"
+                    accept=".txt,.md,text/plain,text/markdown"
+                    onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
+                    style={{ fontSize: '14px' }}
+                  />
+                  <div style={styles.hint}>
+                    Upload long-form UTF-8 `.txt` or `.md` files. Raters can browse them page by page
+                    and search them with exact, semantic, or hybrid retrieval.
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!documentFile}
+                  style={{
+                    ...styles.primaryButton,
+                    opacity: documentFile ? 1 : 0.5,
+                    cursor: documentFile ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Upload Document
                 </button>
               </form>
             </div>

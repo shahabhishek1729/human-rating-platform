@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from models import Experiment, ExperimentRound, Question, Rating, Rater
 from schemas import ExperimentCreate, ExperimentResponse
+from services.documents import delete_experiment_documents
 from .mappers import build_experiment_response
 from fastapi import HTTPException
 from .prolific import delete_study
@@ -149,6 +150,12 @@ async def delete_experiment(
                     "Failed to delete Prolific study %s (continuing with local delete)",
                     study_id,
                 )
+
+    await delete_experiment_documents(
+        experiment_id=experiment_id,
+        db=db,
+        settings=settings,
+    )
 
     await db.delete(experiment)
     await db.commit()

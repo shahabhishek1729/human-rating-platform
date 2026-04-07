@@ -8,6 +8,9 @@ import type {
   Analytics,
   ChatMessage,
   DelegationTask,
+  ExperimentDocument,
+  ExperimentDocumentPage,
+  ExperimentDocumentSearchResponse,
   ExperimentRound,
   Experiment,
   ExperimentCreate,
@@ -62,6 +65,8 @@ const routes = {
     experiments: '/admin/experiments',
     experiment: (id: number) => `/admin/experiments/${id}`,
     upload: (id: number) => `/admin/experiments/${id}/upload`,
+    uploadDocument: (id: number) => `/admin/experiments/${id}/documents/upload`,
+    documents: (id: number) => `/admin/experiments/${id}/documents`,
     uploads: (id: number) => `/admin/experiments/${id}/uploads`,
     stats: (id: number) => `/admin/experiments/${id}/stats`,
     analytics: (id: number) => `/admin/experiments/${id}/analytics`,
@@ -80,6 +85,9 @@ const routes = {
   rater: {
     start: '/raters/start',
     nextQuestion: '/raters/next-question',
+    documents: '/raters/documents',
+    documentPage: (documentId: number) => `/raters/documents/${documentId}/page`,
+    documentSearch: '/raters/documents/search',
     submit: '/raters/submit',
     sessionStatus: '/raters/session-status',
     endSession: '/raters/end-session',
@@ -296,6 +304,16 @@ export const api = {
     });
   },
 
+  async uploadDocument(experimentId: number, file: File): Promise<MessageResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return requestJson<MessageResponse>(routes.admin.uploadDocument(experimentId), {
+      method: 'POST',
+      formData,
+    });
+  },
+
   async getExperimentStats(
     experimentId: number,
     { includePreview = false }: { includePreview?: boolean } = {}
@@ -316,6 +334,10 @@ export const api = {
 
   async listUploads(experimentId: number): Promise<Upload[]> {
     return requestJson<Upload[]>(routes.admin.uploads(experimentId));
+  },
+
+  async listDocuments(experimentId: number): Promise<ExperimentDocument[]> {
+    return requestJson<ExperimentDocument[]>(routes.admin.documents(experimentId));
   },
 
   async deleteExperiment(experimentId: number): Promise<MessageResponse> {
@@ -416,6 +438,46 @@ export const api = {
     }
 
     return parseJson<Question | null>(response, url);
+  },
+
+  async listRaterDocuments(sessionToken: string, questionId: number): Promise<ExperimentDocument[]> {
+    return requestJson<ExperimentDocument[]>(routes.rater.documents, {
+      headers: { 'X-Rater-Session': sessionToken },
+      query: { question_id: questionId },
+    });
+  },
+
+  async getRaterDocumentPage(
+    sessionToken: string,
+    questionId: number,
+    documentId: number,
+    page: number,
+    pageSize: number
+  ): Promise<ExperimentDocumentPage> {
+    return requestJson<ExperimentDocumentPage>(routes.rater.documentPage(documentId), {
+      headers: { 'X-Rater-Session': sessionToken },
+      query: { question_id: questionId, page, page_size: pageSize },
+    });
+  },
+
+  async searchRaterDocuments(
+    sessionToken: string,
+    questionId: number,
+    documentId: number | null,
+    query: string,
+    mode: 'lexical' | 'semantic' | 'hybrid',
+    limit: number = 8
+  ): Promise<ExperimentDocumentSearchResponse> {
+    return requestJson<ExperimentDocumentSearchResponse>(routes.rater.documentSearch, {
+      headers: { 'X-Rater-Session': sessionToken },
+      query: {
+        question_id: questionId,
+        ...(documentId !== null ? { document_id: documentId } : {}),
+        q: query,
+        mode,
+        limit,
+      },
+    });
   },
 
   async submitRating(sessionToken: string, data: RatingSubmit): Promise<SubmitRatingResponse> {
