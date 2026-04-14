@@ -65,10 +65,14 @@ async def upload_questions_csv(
     await db.commit()
 
     logger.info(
-        "Uploaded %s questions to experiment %s from %s",
-        questions_added,
-        experiment_id,
-        file.filename,
+        "Question batch uploaded",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "question_count": questions_added,
+                "filename": file.filename,
+            }
+        },
     )
 
     return {"message": f"Uploaded {questions_added} questions"}

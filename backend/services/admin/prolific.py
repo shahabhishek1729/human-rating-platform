@@ -148,7 +148,10 @@ async def delete_study(
     async with _build_client(settings) as client:
         response = await client.delete(f"/studies/{study_id}/")
         if response.status_code == 404:
-            logger.warning("Prolific study %s already deleted (404)", study_id)
+            logger.warning(
+                "Prolific study already deleted (404)",
+                extra={"attributes": {"study_id": study_id}},
+            )
             return
         response.raise_for_status()
 

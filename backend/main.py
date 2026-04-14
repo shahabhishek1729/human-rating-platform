@@ -13,12 +13,9 @@ from starlette.responses import Response
 
 from config import get_settings
 from database import build_database
+from logging_config import configure_logging
 from routers import admin, raters
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -32,18 +29,34 @@ async def log_requests(
 
     if request.url.path.startswith(("/api/",)):
         logger.info(
-            "%s %s - %s - %.3fs",
-            request.method,
-            request.url.path,
-            response.status_code,
-            duration,
+            "HTTP request",
+            extra={
+                "attributes": {
+                    "http.method": request.method,
+                    "http.route": request.url.path,
+                    "http.status_code": response.status_code,
+                    "http.duration_ms": round(duration * 1000, 1),
+                }
+            },
         )
 
     return response
 
 
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("Unhandled exception: %s", exc, exc_info=True)
+    logger.error(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=True,
+        extra={
+            "attributes": {
+                "http.method": request.method,
+                "http.route": request.url.path,
+                "exception.type": type(exc).__name__,
+            }
+        },
+    )
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
@@ -56,6 +69,18 @@ async def health():
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings.app.log_level)
+
+    logger.info(
+        "Starting Human Rating Platform",
+        extra={
+            "attributes": {
+                "log_level": settings.app.log_level,
+                "prolific_mode": settings.prolific.mode.value,
+            }
+        },
+    )
+
     database = build_database(settings)
 
     @asynccontextmanager

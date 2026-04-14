@@ -45,7 +45,15 @@ async def create_experiment(
     await db.commit()
     await db.refresh(db_experiment)
 
-    logger.info("Created experiment: id=%s, name=%s", db_experiment.id, db_experiment.name)
+    logger.info(
+        "Experiment created",
+        extra={
+            "attributes": {
+                "experiment_id": db_experiment.id,
+                "experiment_name": db_experiment.name,
+            }
+        },
+    )
     return build_experiment_response(db_experiment, question_count=0, rating_count=0)
 
 
@@ -148,17 +156,29 @@ async def delete_experiment(
                     settings=settings.prolific,
                     study_id=study_id,
                 )
-                logger.info("Deleted Prolific study: %s", study_id)
+                logger.info(
+                    "Prolific study deleted",
+                    extra={"attributes": {"study_id": study_id}},
+                )
             except Exception:
-                logger.exception(
-                    "Failed to delete Prolific study %s (continuing with local delete)",
-                    study_id,
+                logger.warning(
+                    "Failed to delete Prolific study (continuing with local delete)",
+                    exc_info=True,
+                    extra={"attributes": {"study_id": study_id}},
                 )
 
     await db.delete(experiment)
     await db.commit()
 
-    logger.info("Deleted experiment: id=%s, name=%s", experiment_id, experiment_name)
+    logger.info(
+        "Experiment deleted",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "experiment_name": experiment_name,
+            }
+        },
+    )
     return {"message": "Experiment deleted successfully"}
 
 

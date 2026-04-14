@@ -262,6 +262,7 @@ class SubtaskDecomposer:
                 iteration,
                 len(history),
                 raw[:200],
+                exc_info=True,
             )
             raise RuntimeError("LLM returned an unparseable response")
 
@@ -306,6 +307,6 @@ class SubtaskDecomposer:
         )
         result = _parse_response(raw, "fallback_synthesis")
         if not result or not result.get("answer"):
-            logger.error("Fallback synthesis also failed: %r", raw[:200])
+            logger.error("Fallback synthesis also failed: %r", raw[:200], exc_info=True)
             return {"answer": "", "reasoning": ""}
         return result

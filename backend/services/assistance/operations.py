@@ -140,11 +140,15 @@ async def start_assistance(
     await db.refresh(assistance_session)
 
     logger.info(
-        "Assistance started: session_id=%s, rater_id=%s, question_id=%s, method=%s",
-        assistance_session.id,
-        rater_id,
-        question_id,
-        experiment.assistance_method,
+        "Assistance session started",
+        extra={
+            "attributes": {
+                "session_id": assistance_session.id,
+                "rater_id": rater_id,
+                "question_id": question_id,
+                "method": experiment.assistance_method,
+            }
+        },
     )
 
     return _step_to_response(assistance_session.id, step)
@@ -177,12 +181,16 @@ async def advance_assistance(
         step = await method.advance(state, human_input, params)
     except RuntimeError:
         logger.error(
-            "Assistance advance failed with unrecoverable error: session_id=%s, rater_id=%s, "
-            "question_id=%s, method=%s — skipping question for retry",
-            session_id,
-            rater_id,
-            assistance_session.question_id,
-            assistance_session.method_name,
+            "Assistance advance failed with unrecoverable error; skipping question for retry",
+            exc_info=True,
+            extra={
+                "attributes": {
+                    "session_id": session_id,
+                    "rater_id": rater_id,
+                    "question_id": assistance_session.question_id,
+                    "method": assistance_session.method_name,
+                }
+            },
         )
         step = InteractionStep(type=StepType.SKIP, is_terminal=True)
 
@@ -190,10 +198,14 @@ async def advance_assistance(
     await db.commit()
 
     logger.info(
-        "Assistance advanced: session_id=%s, type=%s, is_terminal=%s",
-        session_id,
-        step.type,
-        step.is_terminal,
+        "Assistance session advanced",
+        extra={
+            "attributes": {
+                "session_id": session_id,
+                "step_type": step.type,
+                "is_terminal": step.is_terminal,
+            }
+        },
     )
 
     return _step_to_response(session_id, step)

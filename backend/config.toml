@@ -1,6 +1,7 @@
 [app]
 cors_origins = ["http://localhost:5173", "http://localhost:8000"]
 site_url = "http://localhost:5173"
+log_level = "INFO"   # DEBUG | INFO | WARNING | ERROR
 
 [database]
 url = "postgresql://postgres:postgres@localhost:5432/human_rating_platform"

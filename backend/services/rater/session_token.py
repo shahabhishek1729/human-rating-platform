@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import hmac
 import json
+import logging
 import time
 from hashlib import sha256
 
 from fastapi import HTTPException
 
 from config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 def _b64url(data: bytes) -> str:
@@ -47,11 +50,17 @@ def verify_rater_session_token(settings: Settings, token: str) -> dict:
     try:
         ver, payload, sig = token.split(".")
     except ValueError:
+        logger.warning("Rater session token malformed")
         raise HTTPException(status_code=401, detail="Invalid rater session")
     if ver != VERSION:
+        logger.warning(
+            "Rater session token version mismatch",
+            extra={"attributes": {"got": ver, "expected": VERSION}},
+        )
         raise HTTPException(status_code=401, detail="Invalid rater session")
     expected = _sign(settings.effective_rater_session_secret, payload)
     if not hmac.compare_digest(expected, sig):
+        logger.warning("Rater session token signature invalid")
         raise HTTPException(status_code=401, detail="Invalid rater session")
     data = _unb64url_json(payload)
     rid = data.get("rid")
@@ -64,10 +73,19 @@ def verify_rater_session_token(settings: Settings, token: str) -> dict:
         iat = int(iat)
         exp = int(exp)
     except Exception:
+        logger.warning("Rater session token payload invalid")
         raise HTTPException(status_code=401, detail="Invalid rater session")
     # Enforce TTL: expired tokens are treated as expired sessions
     now = int(time.time())
     if exp <= now:
         # Keep this aligned with frontend handling for expired sessions
+        logger.warning(
+            "Rater session token expired",
+            extra={"attributes": {"rater_id": rid, "experiment_id": eid}},
+        )
         raise HTTPException(status_code=403, detail="Session expired")
+    logger.debug(
+        "Rater session token verified",
+        extra={"attributes": {"rater_id": rid, "experiment_id": eid}},
+    )
     return {"rater_id": rid, "experiment_id": eid, "issued_at": iat, "expires_at": exp}

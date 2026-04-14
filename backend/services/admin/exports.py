@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from collections.abc import AsyncIterator
 
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from models import Question, Rating, Rater
 from .queries import fetch_experiment_or_404
+
+logger = logging.getLogger(__name__)
 
 EXPORT_COLUMNS = [
     "rating_id",
@@ -78,6 +81,15 @@ async def stream_export_csv_chunks(
     resolved_batch_size = _resolve_batch_size(batch_size)
     await fetch_experiment_or_404(experiment_id, db)
 
+    logger.info(
+        "CSV export started",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "include_preview": include_preview,
+            }
+        },
+    )
     yield _build_export_header_chunk()
 
     statement = (
@@ -96,10 +108,12 @@ async def stream_export_csv_chunks(
         output = io.StringIO()
         writer = csv.writer(output)
         rows_in_chunk = 0
+        total_rows = 0
 
         async for rating, question, rater in result:
             writer.writerow(_build_export_row(rating, question, rater))
             rows_in_chunk += 1
+            total_rows += 1
 
             if rows_in_chunk >= resolved_batch_size:
                 yield output.getvalue()
@@ -109,6 +123,16 @@ async def stream_export_csv_chunks(
 
         if rows_in_chunk:
             yield output.getvalue()
+
+        logger.info(
+            "CSV export completed",
+            extra={
+                "attributes": {
+                    "experiment_id": experiment_id,
+                    "row_count": total_rows,
+                }
+            },
+        )
     finally:
         close_result = getattr(result, "close", None)
         if callable(close_result):

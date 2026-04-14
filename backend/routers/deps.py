@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from fastapi import Depends, Header, HTTPException
@@ -9,6 +10,8 @@ from config import Settings, get_settings
 from database import get_session
 from services.rater.queries import fetch_rater_or_404
 from services.rater.session_token import verify_rater_session_token
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -34,6 +37,16 @@ async def require_rater_session(
     rater = await fetch_rater_or_404(data["rater_id"], db)
     if rater.experiment_id != data["experiment_id"]:
         # Token claim does not match server-side state
+        logger.warning(
+            "Rater session experiment_id mismatch",
+            extra={
+                "attributes": {
+                    "rater_id": data["rater_id"],
+                    "token_experiment_id": data["experiment_id"],
+                    "actual_experiment_id": rater.experiment_id,
+                }
+            },
+        )
         raise HTTPException(status_code=401, detail="Invalid rater session")
 
     return RaterSession(

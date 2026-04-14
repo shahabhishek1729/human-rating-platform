@@ -108,10 +108,14 @@ async def _refresh_round_statuses(rounds: list[ExperimentRound], db: AsyncSessio
             updated_status = ProlificStudyStatus(status)
         except Exception:
             logger.warning(
-                "Failed to refresh Prolific status for round %s (study %s); using cached status",
-                round_.id,
-                round_.prolific_study_id,
+                "Failed to refresh Prolific status for round; using cached status",
                 exc_info=True,
+                extra={
+                    "attributes": {
+                        "round_id": round_.id,
+                        "study_id": round_.prolific_study_id,
+                    }
+                },
             )
             continue
 
@@ -134,9 +138,10 @@ async def _cleanup_orphaned_study(study_id: str) -> None:
             study_id=study_id,
         )
     except Exception:
-        logger.exception(
-            "Failed to clean up orphaned Prolific study %s after local DB failure",
-            study_id,
+        logger.error(
+            "Failed to clean up orphaned Prolific study after local DB failure",
+            exc_info=True,
+            extra={"attributes": {"study_id": study_id}},
         )
 
 
@@ -157,9 +162,10 @@ async def _commit_round_creation(
     except Exception as exc:
         await db.rollback()
         await _cleanup_orphaned_study(round_.prolific_study_id)
-        logger.exception(
-            "Failed to save local round record after creating Prolific study %s",
-            round_.prolific_study_id,
+        logger.error(
+            "Failed to save local round record after creating Prolific study",
+            exc_info=True,
+            extra={"attributes": {"study_id": round_.prolific_study_id}},
         )
         raise HTTPException(status_code=500, detail=generic_detail) from exc
 
@@ -312,9 +318,10 @@ async def run_pilot_study(
     except HTTPException:
         raise
     except Exception:
-        logger.exception(
-            "Failed to create pilot Prolific study for experiment %s",
-            experiment_id,
+        logger.error(
+            "Failed to create pilot Prolific study",
+            exc_info=True,
+            extra={"attributes": {"experiment_id": experiment_id}},
         )
         raise HTTPException(
             status_code=502,
@@ -341,10 +348,14 @@ async def run_pilot_study(
     await db.refresh(round_)
 
     logger.info(
-        "Created pilot study for experiment %s: round_id=%s, study_id=%s",
-        experiment_id,
-        round_.id,
-        round_.prolific_study_id,
+        "Prolific pilot study created",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "round_id": round_.id,
+                "study_id": round_.prolific_study_id,
+            }
+        },
     )
     return _build_round_response(round_)
 
@@ -390,10 +401,15 @@ async def run_experiment_round(
     except HTTPException:
         raise
     except Exception:
-        logger.exception(
-            "Failed to create round %s Prolific study for experiment %s",
-            next_round_number,
-            experiment_id,
+        logger.error(
+            "Failed to create experiment round Prolific study",
+            exc_info=True,
+            extra={
+                "attributes": {
+                    "experiment_id": experiment_id,
+                    "round_number": next_round_number,
+                }
+            },
         )
         raise HTTPException(
             status_code=502,
@@ -420,11 +436,15 @@ async def run_experiment_round(
     await db.refresh(round_)
 
     logger.info(
-        "Created round %s for experiment %s: round_id=%s, study_id=%s",
-        next_round_number,
-        experiment_id,
-        round_.id,
-        round_.prolific_study_id,
+        "Prolific experiment round created",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "round_number": next_round_number,
+                "round_id": round_.id,
+                "study_id": round_.prolific_study_id,
+            }
+        },
     )
     return _build_round_response(round_)
 
@@ -452,10 +472,16 @@ async def publish_experiment_round(
             study_id=round_.prolific_study_id,
         )
     except Exception:
-        logger.exception(
-            "Failed to publish Prolific study %s for round %s",
-            round_.prolific_study_id,
-            round_id,
+        logger.error(
+            "Failed to publish Prolific study",
+            exc_info=True,
+            extra={
+                "attributes": {
+                    "experiment_id": experiment_id,
+                    "round_id": round_id,
+                    "study_id": round_.prolific_study_id,
+                }
+            },
         )
         raise HTTPException(
             status_code=502,
@@ -467,6 +493,16 @@ async def publish_experiment_round(
     )
     await db.commit()
 
+    logger.info(
+        "Prolific study published",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "round_id": round_id,
+                "study_id": round_.prolific_study_id,
+            }
+        },
+    )
     return {"message": "Study published on Prolific", "status": round_.prolific_study_status}
 
 
@@ -490,10 +526,16 @@ async def close_experiment_round(
             study_id=round_.prolific_study_id,
         )
     except Exception:
-        logger.exception(
-            "Failed to close Prolific study %s for round %s",
-            round_.prolific_study_id,
-            round_id,
+        logger.error(
+            "Failed to close Prolific study",
+            exc_info=True,
+            extra={
+                "attributes": {
+                    "experiment_id": experiment_id,
+                    "round_id": round_id,
+                    "study_id": round_.prolific_study_id,
+                }
+            },
         )
         raise HTTPException(
             status_code=502,
@@ -510,6 +552,16 @@ async def close_experiment_round(
     round_.prolific_study_status = ProlificStudyStatus(status)
     await db.commit()
 
+    logger.info(
+        "Prolific round closed",
+        extra={
+            "attributes": {
+                "experiment_id": experiment_id,
+                "round_id": round_id,
+                "study_id": round_.prolific_study_id,
+            }
+        },
+    )
     return {"message": "Round closed on Prolific", "status": round_.prolific_study_status}
 
 

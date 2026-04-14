@@ -38,6 +38,7 @@ class AppSettings(_StrictModel):
         default_factory=lambda: ["*"],
     )
     site_url: str = "http://localhost:5173"
+    log_level: str = "INFO"
 
     @field_validator("cors_origins", mode="before")
     @classmethod

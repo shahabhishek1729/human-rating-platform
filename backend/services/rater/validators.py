@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Rater
 from .mappers import build_session_end_time
+
+logger = logging.getLogger(__name__)
 
 
 def validate_rating_confidence(confidence: int) -> None:
@@ -40,6 +43,15 @@ async def validate_rater_session_is_active(rater: Rater, db: AsyncSession) -> No
     if datetime.now(UTC) <= build_session_end_time(rater.session_start):
         return
 
+    logger.warning(
+        "Rater session expired",
+        extra={
+            "attributes": {
+                "rater_id": rater.id,
+                "experiment_id": rater.experiment_id,
+            }
+        },
+    )
     rater.is_active = False
     rater.session_end = datetime.now(UTC)
     await db.commit()

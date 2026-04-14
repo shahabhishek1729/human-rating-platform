@@ -967,7 +967,7 @@ def test_prolific_round_commit_conflict_preserves_409_when_cleanup_fails(
     assert resp.status_code == 409
     assert resp.json()["detail"] == "A round with this number already exists for this experiment"
     assert delete_route.called
-    assert "Failed to clean up orphaned Prolific study ROUND_ORPHAN_DELETE_FAIL" in caplog.text
+    assert "Failed to clean up orphaned Prolific study after local DB failure" in caplog.text
 
 
 @respx.mock

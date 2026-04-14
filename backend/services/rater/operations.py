@@ -87,7 +87,15 @@ async def start_session(
             existing_rater.session_end = None
             await db.commit()
             await db.refresh(existing_rater)
-            logger.info("Preview rater reset: rater_id=%s", existing_rater.id)
+            logger.info(
+                "Preview rater reset",
+                extra={
+                    "attributes": {
+                        "rater_id": existing_rater.id,
+                        "experiment_id": experiment_id,
+                    }
+                },
+            )
             token = issue_rater_session_token(
                 settings=settings, rater_id=existing_rater.id, experiment_id=experiment_id
             )
@@ -126,10 +134,15 @@ async def start_session(
     await db.refresh(rater)
 
     logger.info(
-        "New rater session: rater_id=%s, prolific_id=%s, experiment_id=%s",
-        rater.id,
-        prolific_pid,
-        experiment_id,
+        "Rater session started",
+        extra={
+            "attributes": {
+                "rater_id": rater.id,
+                "experiment_id": experiment_id,
+                "prolific_pid": prolific_pid,
+                "is_preview": is_preview,
+            }
+        },
     )
 
     token = issue_rater_session_token(
@@ -173,6 +186,16 @@ async def get_next_question(
     )
 
     if selected is None:
+        logger.warning(
+            "No eligible questions found for rater",
+            extra={
+                "attributes": {
+                    "rater_id": rater_id,
+                    "experiment_id": rater.experiment_id,
+                    "eligible_count": len(eligible_questions),
+                }
+            },
+        )
         return None
     return build_question_response(selected)
 
@@ -233,10 +256,16 @@ async def submit_rating(
     await db.refresh(db_rating)
 
     logger.info(
-        "Rating submitted: rating_id=%s, rater_id=%s, question_id=%s",
-        db_rating.id,
-        rater_id,
-        payload.question_id,
+        "Rating submitted",
+        extra={
+            "attributes": {
+                "rating_id": db_rating.id,
+                "rater_id": rater_id,
+                "experiment_id": rater.experiment_id,
+                "question_id": payload.question_id,
+                "question_type": question.question_type,
+            }
+        },
     )
 
     return RatingResponse(id=db_rating.id, success=True)

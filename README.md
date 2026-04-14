@@ -255,6 +255,7 @@ Backend settings are loaded via `backend/config.py` (`get_settings()`), with thi
 Env keys use Pydantic's nested `__` delimiter for nested settings models:
 
 - `APP__CORS_ORIGINS` — JSON array, e.g. `["http://localhost:5173","http://localhost:8000"]`
+- `APP__LOG_LEVEL` — log verbosity: `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default: `INFO`). Logs are emitted as structured JSON with OpenTelemetry-compatible field names (`timestamp`, `severity`, `body`, `attributes`).
 - `DATABASE__URL` — Postgres connection string
 - `EXPORTS__STREAM_BATCH_SIZE` — CSV export chunking (memory/throughput tradeoff)
 - `TESTING__EXPORT_SEED_ROW_COUNT` — characterization test dataset volume
