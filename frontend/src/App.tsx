@@ -5,6 +5,7 @@ import RaterView from './components/RaterView';
 import AdminView from './components/AdminView';
 import ExperimentDetailPage from './components/ExperimentDetailPage';
 import LoginPage from './components/LoginPage';
+import LandingPage from './components/LandingPage';
 import { api } from './api';
 import {
   isE2eAuthBypassed,
@@ -28,7 +29,7 @@ function App() {
               <Navigate to="/admin" replace />
             </SignedIn>
             <SignedOut>
-              <LoginPage />
+              <LandingPage />
             </SignedOut>
           </>
         }
