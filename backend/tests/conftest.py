@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine.url import make_url
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -16,9 +18,42 @@ from config import get_settings  # noqa: E402
 from main import create_app  # noqa: E402
 from models import SESSION_DURATION_MINUTES  # noqa: E402
 
+_TEST_DB_NAME = "human_rating_platform_test"
+
+
+def _replace_db_name(url: str, new_name: str) -> str:
+    return make_url(url).set(database=new_name).render_as_string(hide_password=False)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def test_database():
+    """Create and migrate an isolated test database, then point all settings at it."""
+    from alembic import command as alembic_command
+    from alembic.config import Config
+
+    dev_url = get_settings().sync_database_url
+    test_url = _replace_db_name(dev_url, _TEST_DB_NAME)
+    admin_url = _replace_db_name(dev_url, "postgres")
+
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    with admin_engine.connect() as conn:
+        conn.execute(text(f"DROP DATABASE IF EXISTS {_TEST_DB_NAME} WITH (FORCE)"))
+        conn.execute(text(f"CREATE DATABASE {_TEST_DB_NAME}"))
+
+    alembic_cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    alembic_cfg.set_main_option("sqlalchemy.url", test_url)
+    alembic_command.upgrade(alembic_cfg, "head")
+
+    os.environ["DATABASE__URL"] = test_url
+    get_settings.cache_clear()
+
+    yield
+
+    os.environ.pop("DATABASE__URL", None)
+
 
 @pytest.fixture(scope="session")
-def sync_engine():
+def sync_engine(test_database):
     settings = get_settings()
     return create_engine(settings.sync_database_url, pool_pre_ping=True)
 
