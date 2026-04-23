@@ -27,7 +27,7 @@ export default function LandingPage() {
             Sign In
           </button>
           <a
-            href="#"
+            href="https://github.com/human-ai-complementarity/human-rating-platform/"
             target="_blank"
             rel="noopener noreferrer"
             className="login-btn"
