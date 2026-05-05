@@ -44,7 +44,7 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
     description: '',
     estimated_completion_time: 60,
     reward: 900,
-    pilot_hours: 5,
+    pilot_places: 5,
     device_compatibility: ['desktop'],
   });
 
@@ -857,13 +857,13 @@ function ExperimentDetail({ experiment, onBack, onDeleted, onRefresh }: Experime
                       </div>
                     </div>
                     <div style={styles.inputGroup}>
-                      <label htmlFor="pilot-hours" style={styles.label}>Pilot Hours (# of raters)</label>
+                      <label htmlFor="pilot-places" style={styles.label}>Number of Raters</label>
                       <input
-                        id="pilot-hours"
-                        data-testid="pilot-hours-input"
+                        id="pilot-places"
+                        data-testid="pilot-places-input"
                         type="number"
-                        value={pilotForm.pilot_hours}
-                        onChange={(e) => setPilotForm({ ...pilotForm, pilot_hours: parseInt(e.target.value) || 0 })}
+                        value={pilotForm.pilot_places}
+                        onChange={(e) => setPilotForm({ ...pilotForm, pilot_places: parseInt(e.target.value) || 0 })}
                         min="1"
                         required
                         style={styles.input}

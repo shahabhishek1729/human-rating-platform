@@ -21,7 +21,7 @@ class PilotStudyCreate(BaseModel):
     description: str
     estimated_completion_time: int = Field(ge=1)
     reward: int = Field(ge=1)
-    pilot_hours: int = Field(default=5, ge=1)
+    pilot_places: int = Field(default=5, ge=1)
     device_compatibility: list[Literal["desktop", "tablet", "mobile"]] = Field(
         default_factory=lambda: ["desktop"]
     )

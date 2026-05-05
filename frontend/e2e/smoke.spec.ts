@@ -261,13 +261,13 @@ async function installApiMocks(
         description: string;
         estimated_completion_time: number;
         reward: number;
-        pilot_hours: number;
+        pilot_places: number;
       };
       const pilot = buildRound(state, {
         round_number: 0,
         prolific_study_id: 'study-pilot-1',
         prolific_study_status: 'UNPUBLISHED',
-        places_requested: payload.pilot_hours,
+        places_requested: payload.pilot_places,
         prolific_study_url: 'https://app.prolific.com/researcher/workspaces/studies/study-pilot-1',
       });
       state.rounds[experimentId] = [pilot];
@@ -423,7 +423,7 @@ test('create experiment, upload CSV, run pilot, close it, and launch a round', a
   await page.getByTestId('pilot-description-input').fill('Pilot description for smoke coverage');
   await page.getByTestId('pilot-estimated-completion-time-input').fill('60');
   await page.getByTestId('pilot-reward-input').fill('900');
-  await page.getByTestId('pilot-hours-input').fill('5');
+  await page.getByTestId('pilot-places-input').fill('5');
   await page.getByTestId('run-pilot-button').click();
 
   await expect(page.getByText('Pilot Round', { exact: true })).toBeVisible();

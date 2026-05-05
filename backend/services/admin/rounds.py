@@ -353,7 +353,7 @@ async def run_pilot_study(
             description=payload.description,
             estimated_completion_time=payload.estimated_completion_time,
             reward=payload.reward,
-            places=payload.pilot_hours,
+            places=payload.pilot_places,
             device_compatibility=payload.device_compatibility,
         )
     except HTTPException:
@@ -393,7 +393,7 @@ async def run_pilot_study(
         estimated_completion_time=payload.estimated_completion_time,
         reward=payload.reward,
         device_compatibility=json.dumps(payload.device_compatibility),
-        places_requested=payload.pilot_hours,
+        places_requested=payload.pilot_places,
     )
     await _commit_round_creation(
         db,

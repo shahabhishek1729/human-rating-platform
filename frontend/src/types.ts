@@ -150,7 +150,7 @@ export interface PilotStudyCreate {
   description: string;
   estimated_completion_time: number;
   reward: number;
-  pilot_hours: number;
+  pilot_places: number;
   device_compatibility: string[];
 }
 

@@ -80,6 +80,7 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
       lineHeight: 1.5,
       color: '#333',
       marginBottom: '28px',
+      whiteSpace: 'pre-wrap' as const,
     },
     optionsGrid: {
       display: 'flex',

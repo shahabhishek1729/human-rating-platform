@@ -539,7 +539,7 @@ def _pilot_payload() -> dict:
         "description": "Test study",
         "estimated_completion_time": 10,
         "reward": 500,
-        "pilot_hours": 5,
+        "pilot_places": 5,
         "device_compatibility": ["desktop"],
     }
 
