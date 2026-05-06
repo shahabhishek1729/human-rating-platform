@@ -561,7 +561,7 @@ def _pilot_payload() -> dict:
         "description": "Test study",
         "estimated_completion_time": 10,
         "reward": 500,
-        "pilot_hours": 5,
+        "pilot_places": 5,
         "device_compatibility": ["desktop"],
     }
 
@@ -604,6 +604,60 @@ def _mock_get_study(
     return respx.get(f"{PROLIFIC_BASE}/studies/{study_id}/").mock(
         return_value=Response(status, json=body)
     )
+
+
+def _mock_workspace_projects(
+    *,
+    workspace_id: str,
+    project_ids: list[str],
+    status: int = 200,
+) -> respx.Route:
+    body = {"results": [{"id": pid} for pid in project_ids]} if status == 200 else {}
+    return respx.get(f"{PROLIFIC_BASE}/workspaces/{workspace_id}/projects/").mock(
+        return_value=Response(status, json=body)
+    )
+
+
+def _mock_workspace_balance(
+    *,
+    workspace_id: str,
+    currency_code: str = "USD",
+    status: int = 200,
+) -> respx.Route:
+    body = (
+        {
+            "currency_code": currency_code,
+            "total_balance": 0,
+            "available_balance": 0,
+        }
+        if status == 200
+        else {}
+    )
+    return respx.get(f"{PROLIFIC_BASE}/workspaces/{workspace_id}/balance/").mock(
+        return_value=Response(status, json=body)
+    )
+
+
+def _mock_update_study(
+    *,
+    study_id: str = PROLIFIC_STUDY_ID,
+    status: int = 200,
+) -> respx.Route:
+    body = {"id": study_id, "status": "UNPUBLISHED"} if status == 200 else {"error": "fail"}
+    return respx.patch(f"{PROLIFIC_BASE}/studies/{study_id}/").mock(
+        return_value=Response(status, json=body)
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_prolific_currency_cache():
+    # Module-level cache in services.admin.prolific persists across tests in
+    # the same process; reset it so each test sees a clean lookup state.
+    from services.admin.prolific import _reset_currency_cache
+
+    _reset_currency_cache()
+    yield
+    _reset_currency_cache()
 
 
 def _patch_commit_to_fail_for_round(
@@ -720,6 +774,73 @@ def test_prolific_create_failure_returns_502(client: TestClient, enable_prolific
     assert stored["prolific_completion_url"] is None
     rounds = client.get(f"/api/admin/experiments/{experiment['id']}/prolific/rounds").json()
     assert rounds == []
+
+
+@respx.mock
+def test_prolific_create_includes_project_when_set(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+    create_resp = client.post("/api/admin/experiments", json=_prolific_experiment_payload())
+    assert create_resp.status_code == 200, create_resp.text
+    experiment = create_resp.json()
+
+    route = _mock_create_study()
+    pilot_resp = client.post(
+        f"/api/admin/experiments/{experiment['id']}/prolific/pilot",
+        json=_pilot_payload(),
+    )
+    assert pilot_resp.status_code == 200, pilot_resp.text
+
+    sent = json.loads(route.calls[-1].request.content.decode())
+    assert sent["project"] == "PROJ_ABC"
+
+
+@respx.mock
+def test_prolific_create_omits_project_when_unset(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # When project_id is empty, the field must be absent from the payload —
+    # sending an empty string would 400 from Prolific.
+    monkeypatch.setattr(get_settings().prolific, "project_id", "")
+    create_resp = client.post("/api/admin/experiments", json=_prolific_experiment_payload())
+    assert create_resp.status_code == 200, create_resp.text
+    experiment = create_resp.json()
+
+    route = _mock_create_study()
+    pilot_resp = client.post(
+        f"/api/admin/experiments/{experiment['id']}/prolific/pilot",
+        json=_pilot_payload(),
+    )
+    assert pilot_resp.status_code == 200, pilot_resp.text
+
+    sent = json.loads(route.calls[-1].request.content.decode())
+    assert "project" not in sent
+
+
+@respx.mock
+def test_prolific_create_failure_propagates_message(client: TestClient, enable_prolific):
+    create_resp = client.post("/api/admin/experiments", json=_prolific_experiment_payload())
+    assert create_resp.status_code == 200, create_resp.text
+    experiment = create_resp.json()
+
+    respx.post(f"{PROLIFIC_BASE}/studies/").mock(
+        return_value=Response(
+            400,
+            json={"error": {"detail": "Reward must be at least 100"}},
+        )
+    )
+
+    resp = client.post(
+        f"/api/admin/experiments/{experiment['id']}/prolific/pilot",
+        json=_pilot_payload(),
+    )
+    assert resp.status_code == 502
+    assert "Reward must be at least 100" in resp.json()["detail"]
 
 
 @respx.mock
@@ -1058,6 +1179,90 @@ def test_prolific_round_publish_updates_status(client: TestClient, enable_prolif
 
 
 @respx.mock
+def test_prolific_round_edit_updates_db_and_calls_prolific(client: TestClient, enable_prolific):
+    experiment, _pilot = _create_prolific_experiment(client)
+    experiment_id = experiment["id"]
+
+    route = _mock_update_study()
+    resp = client.patch(
+        f"/api/admin/experiments/{experiment_id}/prolific/rounds/1",
+        json={"description": "Updated description", "reward": 1500, "places": 7},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["description"] == "Updated description"
+    assert body["reward"] == 1500
+    assert body["places_requested"] == 7
+    assert route.called
+
+    sent = json.loads(route.calls[0].request.content)
+    assert sent == {
+        "description": "Updated description",
+        "reward": 1500,
+        "total_available_places": 7,
+    }
+
+
+@respx.mock
+def test_prolific_round_edit_rejects_when_published(client: TestClient, enable_prolific):
+    experiment, _pilot = _create_prolific_experiment(client)
+    experiment_id = experiment["id"]
+
+    _mock_publish_study()
+    publish_resp = client.post(f"/api/admin/experiments/{experiment_id}/prolific/rounds/1/publish")
+    assert publish_resp.status_code == 200
+
+    resp = client.patch(
+        f"/api/admin/experiments/{experiment_id}/prolific/rounds/1",
+        json={"description": "Cannot edit"},
+    )
+
+    assert resp.status_code == 400
+    assert "unpublished" in resp.json()["detail"].lower()
+
+
+@respx.mock
+def test_prolific_round_edit_rejects_empty_payload(client: TestClient, enable_prolific):
+    experiment, _pilot = _create_prolific_experiment(client)
+    experiment_id = experiment["id"]
+
+    resp = client.patch(
+        f"/api/admin/experiments/{experiment_id}/prolific/rounds/1",
+        json={},
+    )
+
+    assert resp.status_code == 400
+
+
+@respx.mock
+def test_prolific_round_edit_returns_404_for_missing_round(client: TestClient, enable_prolific):
+    experiment, _pilot = _create_prolific_experiment(client)
+    experiment_id = experiment["id"]
+
+    resp = client.patch(
+        f"/api/admin/experiments/{experiment_id}/prolific/rounds/9999",
+        json={"description": "x"},
+    )
+
+    assert resp.status_code == 404
+
+
+@respx.mock
+def test_prolific_round_edit_returns_502_when_prolific_fails(client: TestClient, enable_prolific):
+    experiment, _pilot = _create_prolific_experiment(client)
+    experiment_id = experiment["id"]
+
+    _mock_update_study(status=500)
+    resp = client.patch(
+        f"/api/admin/experiments/{experiment_id}/prolific/rounds/1",
+        json={"description": "x"},
+    )
+
+    assert resp.status_code == 502
+
+
+@respx.mock
 def test_prolific_round_list_refreshes_transient_status_from_prolific(
     client: TestClient,
     enable_prolific,
@@ -1177,3 +1382,99 @@ def test_platform_status_disabled_by_default(client: TestClient):
         assert resp.json()["prolific_enabled"] is False
     finally:
         settings.prolific.api_token = original
+
+
+@respx.mock
+def test_platform_status_returns_workspace_currency(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+
+    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC", "PROJ_OTHER"])
+    _mock_workspace_balance(workspace_id="WS_ABC", currency_code="USD")
+
+    resp = client.get("/api/admin/platform-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["currency_code"] == "USD"
+    assert body["currency_symbol"] == "$"
+
+
+def test_platform_status_currency_null_when_workspace_id_unset(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "workspace_id", "")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+
+    resp = client.get("/api/admin/platform-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["currency_code"] is None
+    assert body["currency_symbol"] is None
+
+
+@respx.mock
+def test_platform_status_currency_null_when_project_not_in_workspace(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_NOT_HERE")
+
+    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_OTHER"])
+    balance_route = _mock_workspace_balance(workspace_id="WS_ABC")
+
+    resp = client.get("/api/admin/platform-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["currency_code"] is None
+    assert body["currency_symbol"] is None
+    # Project mismatch is detected before the balance call, so we never hit it.
+    assert not balance_route.called
+
+
+@respx.mock
+def test_platform_status_currency_null_when_balance_fails(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+
+    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC"])
+    _mock_workspace_balance(workspace_id="WS_ABC", status=500)
+
+    resp = client.get("/api/admin/platform-status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["currency_code"] is None
+    assert body["currency_symbol"] is None
+
+
+@respx.mock
+def test_platform_status_currency_cached_across_calls(
+    client: TestClient,
+    enable_prolific,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+
+    projects_route = _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC"])
+    balance_route = _mock_workspace_balance(workspace_id="WS_ABC", currency_code="GBP")
+
+    resp1 = client.get("/api/admin/platform-status")
+    resp2 = client.get("/api/admin/platform-status")
+
+    assert resp1.json()["currency_code"] == "GBP"
+    assert resp1.json()["currency_symbol"] == "£"
+    assert resp2.json()["currency_code"] == "GBP"
+    assert projects_route.call_count == 1
+    assert balance_route.call_count == 1
