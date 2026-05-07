@@ -204,20 +204,18 @@ async def get_study(
         return response.json()
 
 
-async def list_workspace_projects(
+async def get_project(
     *,
     settings: ProlificSettings,
-    workspace_id: str,
-) -> list[dict]:
+    project_id: str,
+) -> dict:
     if not settings.enabled:
-        raise RuntimeError("list_workspace_projects called while Prolific is disabled")
+        raise RuntimeError("get_project called while Prolific is disabled")
 
     async with _build_client(settings) as client:
-        response = await client.get(f"/workspaces/{workspace_id}/projects/")
+        response = await client.get(f"/projects/{project_id}/")
         _raise_for_status(response)
-        payload = response.json()
-        results = payload.get("results")
-        return list(results) if isinstance(results, list) else []
+        return response.json()
 
 
 async def get_workspace_balance(
@@ -250,9 +248,9 @@ async def update_study(
 
 
 # Workspace currency lookup is cached for the process lifetime once resolved
-# successfully. Currency for a project's workspace is effectively immutable;
-# changing PROLIFIC__WORKSPACE_ID requires a deploy/restart anyway, so a
-# longer-lived cache than per-request is fine.
+# successfully. The project's workspace and that workspace's currency are
+# effectively immutable; changing PROLIFIC__PROJECT_ID requires a deploy/
+# restart anyway, so a longer-lived cache than per-request is fine.
 _cached_currency: tuple[str | None, str | None] | None = None
 _currency_lock = asyncio.Lock()
 
@@ -266,27 +264,20 @@ def _reset_currency_cache() -> None:
 async def _fetch_workspace_currency(
     settings: ProlificSettings,
 ) -> tuple[str | None, str | None]:
-    if not settings.enabled or not settings.workspace_id or not settings.project_id:
+    if not settings.enabled or not settings.project_id:
         return (None, None)
 
     try:
-        projects = await list_workspace_projects(
-            settings=settings, workspace_id=settings.workspace_id
-        )
-        if not any(p.get("id") == settings.project_id for p in projects):
+        project = await get_project(settings=settings, project_id=settings.project_id)
+        workspace_id = project.get("workspace")
+        if not isinstance(workspace_id, str) or not workspace_id:
             logger.warning(
-                "Configured PROLIFIC__PROJECT_ID is not in PROLIFIC__WORKSPACE_ID's "
-                "project list; currency lookup skipped",
-                extra={
-                    "attributes": {
-                        "project_id": settings.project_id,
-                        "workspace_id": settings.workspace_id,
-                    }
-                },
+                "Prolific project response missing 'workspace'; currency lookup skipped",
+                extra={"attributes": {"project_id": settings.project_id}},
             )
             return (None, None)
 
-        balance = await get_workspace_balance(settings=settings, workspace_id=settings.workspace_id)
+        balance = await get_workspace_balance(settings=settings, workspace_id=workspace_id)
         code = balance.get("currency_code")
         if not isinstance(code, str) or not code:
             return (None, None)
@@ -295,12 +286,7 @@ async def _fetch_workspace_currency(
         logger.warning(
             "Failed to fetch Prolific workspace currency",
             exc_info=True,
-            extra={
-                "attributes": {
-                    "workspace_id": settings.workspace_id,
-                    "project_id": settings.project_id,
-                }
-            },
+            extra={"attributes": {"project_id": settings.project_id}},
         )
         return (None, None)
 
@@ -308,12 +294,13 @@ async def _fetch_workspace_currency(
 async def get_cached_workspace_currency(
     settings: ProlificSettings,
 ) -> tuple[str | None, str | None]:
-    """Resolve and cache (currency_code, currency_symbol) for the configured workspace.
+    """Resolve and cache (currency_code, currency_symbol) for the configured project.
 
-    Returns (None, None) when the integration is disabled, the env vars are
-    unset, the project/workspace pairing is invalid, or any Prolific call
-    fails. Successful results are cached for the process lifetime; failures
-    are not cached so transient outages self-heal on the next call.
+    Looks up the project's workspace via Prolific, then reads the workspace's
+    currency. Returns (None, None) when the integration is disabled,
+    PROLIFIC__PROJECT_ID is unset, or any Prolific call fails. Successful
+    results are cached for the process lifetime; failures are not cached so
+    transient outages self-heal on the next call.
     """
     global _cached_currency
     if _cached_currency is not None:

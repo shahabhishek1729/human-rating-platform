@@ -584,14 +584,19 @@ def _mock_get_study(
     )
 
 
-def _mock_workspace_projects(
+def _mock_project(
     *,
-    workspace_id: str,
-    project_ids: list[str],
+    project_id: str,
+    workspace_id: str | None = "WS_ABC",
     status: int = 200,
 ) -> respx.Route:
-    body = {"results": [{"id": pid} for pid in project_ids]} if status == 200 else {}
-    return respx.get(f"{PROLIFIC_BASE}/workspaces/{workspace_id}/projects/").mock(
+    if status == 200:
+        body: dict = {"id": project_id}
+        if workspace_id is not None:
+            body["workspace"] = workspace_id
+    else:
+        body = {}
+    return respx.get(f"{PROLIFIC_BASE}/projects/{project_id}/").mock(
         return_value=Response(status, json=body)
     )
 
@@ -1368,10 +1373,9 @@ def test_platform_status_returns_workspace_currency(
     enable_prolific,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
     monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
 
-    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC", "PROJ_OTHER"])
+    _mock_project(project_id="PROJ_ABC", workspace_id="WS_ABC")
     _mock_workspace_balance(workspace_id="WS_ABC", currency_code="USD")
 
     resp = client.get("/api/admin/platform-status")
@@ -1381,13 +1385,12 @@ def test_platform_status_returns_workspace_currency(
     assert body["currency_symbol"] == "$"
 
 
-def test_platform_status_currency_null_when_workspace_id_unset(
+def test_platform_status_currency_null_when_project_id_unset(
     client: TestClient,
     enable_prolific,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(get_settings().prolific, "workspace_id", "")
-    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "")
 
     resp = client.get("/api/admin/platform-status")
     assert resp.status_code == 200
@@ -1397,15 +1400,14 @@ def test_platform_status_currency_null_when_workspace_id_unset(
 
 
 @respx.mock
-def test_platform_status_currency_null_when_project_not_in_workspace(
+def test_platform_status_currency_null_when_project_lookup_fails(
     client: TestClient,
     enable_prolific,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
-    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_NOT_HERE")
+    monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_NOT_FOUND")
 
-    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_OTHER"])
+    _mock_project(project_id="PROJ_NOT_FOUND", status=404)
     balance_route = _mock_workspace_balance(workspace_id="WS_ABC")
 
     resp = client.get("/api/admin/platform-status")
@@ -1413,7 +1415,7 @@ def test_platform_status_currency_null_when_project_not_in_workspace(
     body = resp.json()
     assert body["currency_code"] is None
     assert body["currency_symbol"] is None
-    # Project mismatch is detected before the balance call, so we never hit it.
+    # Project lookup fails before we learn the workspace, so balance is never queried.
     assert not balance_route.called
 
 
@@ -1423,10 +1425,9 @@ def test_platform_status_currency_null_when_balance_fails(
     enable_prolific,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
     monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
 
-    _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC"])
+    _mock_project(project_id="PROJ_ABC", workspace_id="WS_ABC")
     _mock_workspace_balance(workspace_id="WS_ABC", status=500)
 
     resp = client.get("/api/admin/platform-status")
@@ -1442,10 +1443,9 @@ def test_platform_status_currency_cached_across_calls(
     enable_prolific,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(get_settings().prolific, "workspace_id", "WS_ABC")
     monkeypatch.setattr(get_settings().prolific, "project_id", "PROJ_ABC")
 
-    projects_route = _mock_workspace_projects(workspace_id="WS_ABC", project_ids=["PROJ_ABC"])
+    project_route = _mock_project(project_id="PROJ_ABC", workspace_id="WS_ABC")
     balance_route = _mock_workspace_balance(workspace_id="WS_ABC", currency_code="GBP")
 
     resp1 = client.get("/api/admin/platform-status")
@@ -1454,5 +1454,5 @@ def test_platform_status_currency_cached_across_calls(
     assert resp1.json()["currency_code"] == "GBP"
     assert resp1.json()["currency_symbol"] == "£"
     assert resp2.json()["currency_code"] == "GBP"
-    assert projects_route.call_count == 1
+    assert project_route.call_count == 1
     assert balance_route.call_count == 1
