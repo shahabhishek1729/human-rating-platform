@@ -35,6 +35,8 @@ from .prolific import (
     stop_study,
     update_study,
 )
+from services.queries import parent_question_ids_subquery
+
 from .queries import fetch_experiment_or_404, fetch_ratings_for_experiment
 
 logger = logging.getLogger(__name__)
@@ -314,7 +316,13 @@ async def calculate_recommendation(
         rating_counts[question.id] = rating_counts.get(question.id, 0) + 1
 
     all_question_ids = (
-        (await db.execute(select(Question.id).where(Question.experiment_id == experiment_id)))
+        (
+            await db.execute(
+                select(Question.id)
+                .where(Question.experiment_id == experiment_id)
+                .where(Question.id.notin_(parent_question_ids_subquery()))
+            )
+        )
         .scalars()
         .all()
     )

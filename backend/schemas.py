@@ -116,6 +116,7 @@ class QuestionResponse(BaseModel):
     question_text: str
     options: Optional[str] = None
     question_type: str
+    parent_question_text: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

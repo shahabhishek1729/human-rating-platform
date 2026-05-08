@@ -16,6 +16,7 @@ export interface Question {
   question_text: string;
   options: string | null;
   question_type: string;
+  parent_question_text?: string | null;
 }
 
 export interface ExperimentStats {

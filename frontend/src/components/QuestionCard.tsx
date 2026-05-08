@@ -75,6 +75,28 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
       letterSpacing: '0.5px',
       marginBottom: '12px',
     },
+    parentBox: {
+      background: '#f0f4f8',
+      border: '1px solid #d6e0ea',
+      borderRadius: '8px',
+      padding: '16px 20px',
+      marginBottom: '20px',
+    },
+    parentLabel: {
+      fontSize: '11px',
+      fontWeight: 600,
+      color: '#5a7896',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+      marginBottom: '6px',
+    },
+    parentText: {
+      fontSize: '15px',
+      lineHeight: 1.5,
+      color: '#3a4a5c',
+      whiteSpace: 'pre-wrap' as const,
+      margin: 0,
+    },
     questionText: {
       fontSize: '20px',
       lineHeight: 1.5,
@@ -170,6 +192,13 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
   return (
     <div style={styles.card}>
       <div style={styles.questionId}>Question {question.question_id}</div>
+
+      {question.parent_question_text && (
+        <div style={styles.parentBox}>
+          <div style={styles.parentLabel}>Context</div>
+          <p style={styles.parentText}>{question.parent_question_text}</p>
+        </div>
+      )}
 
       <p style={styles.questionText}>{question.question_text}</p>
 

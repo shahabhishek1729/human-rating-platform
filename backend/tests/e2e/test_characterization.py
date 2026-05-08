@@ -1456,3 +1456,152 @@ def test_platform_status_currency_cached_across_calls(
     assert resp2.json()["currency_code"] == "GBP"
     assert project_route.call_count == 1
     assert balance_route.call_count == 1
+
+
+# ── parent_question_id (sub-questions) ────────────────────────────────────────
+
+PARENT_TEXT = "Customer review: arrived late but exceeded expectations."
+
+
+def _upload_parent_and_children(client: TestClient, experiment_id: int) -> None:
+    csv_data = (
+        "question_id,question_text,gt_answer,options,question_type,parent_question_id\n"
+        f'parent1,"{PARENT_TEXT}",,,,\n'
+        "sub_satisfied,Does the review express satisfaction?,Yes,Yes|No,MC,parent1\n"
+        "sub_problem,Does the review describe a delivery problem?,Yes,Yes|No,MC,parent1\n"
+    )
+    response = client.post(
+        f"/api/admin/experiments/{experiment_id}/upload",
+        files={"file": ("questions.csv", csv_data, "text/csv")},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_upload_with_parent_question_id_attaches_context_to_children(client: TestClient):
+    experiment = _create_experiment(client)
+    _upload_parent_and_children(client, experiment["id"])
+
+    session_payload = _start_session(client, experiment["id"], prolific_pid="PID_PARENT_CTX")
+    question = client.get(
+        "/api/raters/next-question",
+        headers=_rater_headers(session_payload),
+    ).json()
+
+    # Both eligible questions are children; either should carry the parent text.
+    assert question["question_id"] in {"sub_satisfied", "sub_problem"}
+    assert question["parent_question_text"] == PARENT_TEXT
+
+
+def test_upload_without_parent_question_id_returns_null_context(client: TestClient):
+    """Backwards compat: standalone questions still have parent_question_text == None."""
+    experiment = _create_experiment(client)
+    _upload_questions(client, experiment["id"])  # legacy CSV without the column
+
+    session_payload = _start_session(client, experiment["id"], prolific_pid="PID_LEGACY")
+    question = client.get(
+        "/api/raters/next-question",
+        headers=_rater_headers(session_payload),
+    ).json()
+
+    assert question["parent_question_text"] is None
+
+
+def test_upload_rejects_self_referential_parent(client: TestClient):
+    experiment = _create_experiment(client)
+    csv_data = "question_id,question_text,parent_question_id\nloop,Self-referential question,loop\n"
+    response = client.post(
+        f"/api/admin/experiments/{experiment['id']}/upload",
+        files={"file": ("self_ref.csv", csv_data, "text/csv")},
+    )
+    assert response.status_code == 400
+    assert "cannot reference itself" in response.json()["detail"]
+
+
+def test_upload_rejects_unresolvable_parent_reference(client: TestClient):
+    experiment = _create_experiment(client)
+    csv_data = (
+        "question_id,question_text,parent_question_id\n"
+        "orphan,Child without a parent,does_not_exist\n"
+    )
+    response = client.post(
+        f"/api/admin/experiments/{experiment['id']}/upload",
+        files={"file": ("orphan.csv", csv_data, "text/csv")},
+    )
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "does_not_exist" in detail
+    assert "orphan" in detail
+
+
+def test_next_question_never_returns_parent_rows(client: TestClient):
+    """Parents are header rows; the rater should only ever see children."""
+    experiment = _create_experiment(client)
+    _upload_parent_and_children(client, experiment["id"])
+    session_payload = _start_session(client, experiment["id"], prolific_pid="PID_NO_PARENT")
+    headers = _rater_headers(session_payload)
+
+    seen_question_ids: set[str] = set()
+    for _ in range(2):
+        resp = client.get("/api/raters/next-question", headers=headers)
+        assert resp.status_code == 200
+        question = resp.json()
+        seen_question_ids.add(question["question_id"])
+        client.post(
+            "/api/raters/submit",
+            headers=headers,
+            json={
+                "question_id": question["id"],
+                "answer": "Yes",
+                "confidence": 4,
+                "time_started": datetime.now(UTC).isoformat(),
+            },
+        )
+
+    assert seen_question_ids == {"sub_satisfied", "sub_problem"}
+    assert "parent1" not in seen_question_ids
+
+
+def test_stats_total_questions_excludes_parent_rows(client: TestClient):
+    experiment = _create_experiment(client)
+    _upload_parent_and_children(client, experiment["id"])
+
+    stats = client.get(f"/api/admin/experiments/{experiment['id']}/stats").json()
+    # parent1 + 2 children uploaded, but parent1 is not ratable.
+    assert stats["total_questions"] == 2
+
+
+def test_list_experiments_question_count_excludes_parent_rows(client: TestClient):
+    experiment = _create_experiment(client)
+    _upload_parent_and_children(client, experiment["id"])
+
+    items = client.get("/api/admin/experiments").json()
+    matching = next(item for item in items if item["id"] == experiment["id"])
+    assert matching["question_count"] == 2
+
+
+def test_recommendation_remaining_actions_excludes_parent_rows(client: TestClient):
+    """Bug guard: ghost parent rows used to inflate recommended_places."""
+    experiment = _create_experiment(client)
+    _upload_parent_and_children(client, experiment["id"])
+
+    # num_ratings_per_question defaults to 2 in _create_experiment, 2 children → 4 actions total.
+    session_payload = _start_session(client, experiment["id"], prolific_pid="PID_REC")
+    headers = _rater_headers(session_payload)
+    question = client.get("/api/raters/next-question", headers=headers).json()
+    submit = client.post(
+        "/api/raters/submit",
+        headers=headers,
+        json={
+            "question_id": question["id"],
+            "answer": "Yes",
+            "confidence": 4,
+            "time_started": (datetime.now(UTC) - timedelta(seconds=30)).isoformat(),
+        },
+    )
+    assert submit.status_code == 200
+
+    resp = client.get(f"/api/admin/experiments/{experiment['id']}/prolific/recommend")
+    assert resp.status_code == 200
+    payload = resp.json()
+    # 2 children × 2 ratings - 1 submitted = 3. (Pre-fix this was 5: 3 questions × 2 - 1.)
+    assert payload["remaining_rating_actions"] == 3
