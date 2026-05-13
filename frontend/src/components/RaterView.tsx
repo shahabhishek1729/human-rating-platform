@@ -298,6 +298,10 @@ const handleSessionExpired = () => {
   }, [assistanceStep?.type, sessionToken, loadNextQuestion]);
 
   const hasAssistance = session?.assistance_method && session.assistance_method !== 'none';
+  const assistanceBlocksRating =
+    hasAssistance &&
+    question !== null &&
+    (assistanceStep === null || assistanceStep.type === 'ask_input');
   // Collapse to single column when assistance returned 'none' (LLM decided no help needed)
 
   const styles = {
@@ -483,7 +487,7 @@ const handleSessionExpired = () => {
             <QuestionCard
               question={question}
               onSubmit={handleSubmit}
-              assistanceActive={assistanceStep?.type !== 'complete' && assistanceStep?.type !== 'none'}
+              assistanceActive={assistanceBlocksRating}
               assistanceAnswer={assistanceStep?.payload.synthesis?.answer ?? null}
             />
           </div>

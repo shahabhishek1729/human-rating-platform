@@ -109,7 +109,21 @@ async def start_assistance(
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    step = await method.start(question, params)
+    try:
+        step = await method.start(question, params)
+    except RuntimeError:
+        logger.error(
+            "Assistance start failed with unrecoverable error; continuing without assistance",
+            exc_info=True,
+            extra={
+                "attributes": {
+                    "rater_id": rater_id,
+                    "question_id": question_id,
+                    "method": experiment.assistance_method,
+                }
+            },
+        )
+        step = InteractionStep(type=StepType.NONE, is_terminal=True)
 
     assistance_session = AssistanceSession(
         rater_id=rater_id,
