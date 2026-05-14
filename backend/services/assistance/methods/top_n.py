@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_TOP_N = 3
 _MAX_TOP_N = 10
-_OPTION_LABEL_PATTERN = re.compile(r"(?:^|\r?\n)\s*(?:\(?[A-Z]\)?[.)]|[A-Z]:)\s+")
+_OPTION_LABEL_PATTERN = re.compile(r"(?:^|[,\r\n])\s*(?:\(?[A-Z]\)?[.)]|[A-Z]:)\s+")
 
 _SYSTEM_PROMPT = """\
 You help human raters answer evaluation questions. Rank the most likely answers
@@ -50,7 +50,7 @@ def _parse_options(raw_options: str | None) -> list[str]:
         options = []
         for index, start in enumerate(labeled_option_starts):
             end = labeled_option_starts[index + 1] if index + 1 < len(labeled_option_starts) else None
-            option = raw_options[start:end].strip()
+            option = raw_options[start:end].strip(" ,\r\n")
             if option:
                 options.append(option)
         return options
@@ -72,6 +72,21 @@ def _clamp_top_n(value: Any) -> int:
 
 def _strip_markdown_json(raw: str) -> str:
     return re.sub(r"```json?\n?|```\n?", "", raw).strip()
+
+
+def _parse_top_n_response(raw: str) -> dict:
+    content = _strip_markdown_json(raw)
+    decoder = json.JSONDecoder()
+    for start_index, char in enumerate(content):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(content[start_index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and isinstance(parsed.get("candidates"), list):
+            return parsed
+    raise json.JSONDecodeError("No top-N candidates JSON object found", content, 0)
 
 
 def _match_option_answer(answer: str, options: list[str]) -> str | None:
@@ -143,7 +158,13 @@ def _normalize_candidates(raw_candidates: Any, options: list[str], n: int) -> li
 
 
 class TopNAssistance(AssistanceMethod):
-    async def start(self, question: Question, params: dict) -> InteractionStep:
+    async def start(
+        self,
+        question: Question,
+        params: dict,
+        *,
+        parent_question_text: str | None = None,
+    ) -> InteractionStep:
         settings = get_settings()
         model = params.get("model") or settings.llm.default_model
         requested_n = _clamp_top_n(params.get("n", _DEFAULT_TOP_N))
@@ -155,7 +176,13 @@ class TopNAssistance(AssistanceMethod):
             if options
             else "(free-response question; propose concise candidate answers)"
         )
+        context_block = (
+            f"Parent question/context:\n{parent_question_text}\n\n"
+            if parent_question_text
+            else ""
+        )
         user_prompt = (
+            f"{context_block}"
             f"Question:\n{question.question_text}\n\n"
             f"Question type: {question.question_type}\n"
             f"Options:\n{option_block}\n\n"
@@ -174,7 +201,7 @@ class TopNAssistance(AssistanceMethod):
         )
 
         try:
-            parsed = json.loads(_strip_markdown_json(raw))
+            parsed = _parse_top_n_response(raw)
         except json.JSONDecodeError:
             logger.warning("Failed to parse top-N assistance response: %r", raw)
             parsed = {}
