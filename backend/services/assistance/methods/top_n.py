@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_TOP_N = 3
 _MAX_TOP_N = 10
+_OPTION_LABEL_PATTERN = re.compile(r"(?:^|\r?\n)\s*(?:\(?[A-Z]\)?[.)]|[A-Z]:)\s+")
 
 _SYSTEM_PROMPT = """\
 You help human raters answer evaluation questions. Rank the most likely answers
@@ -40,8 +41,25 @@ Return JSON only, with this shape:
 def _parse_options(raw_options: str | None) -> list[str]:
     if not raw_options:
         return []
-    delimiter = "|" if "|" in raw_options else ","
-    return [option.strip() for option in raw_options.split(delimiter) if option.strip()]
+
+    if "|" in raw_options:
+        return [option.strip() for option in raw_options.split("|") if option.strip()]
+
+    labeled_option_starts = [match.start() for match in _OPTION_LABEL_PATTERN.finditer(raw_options)]
+    if len(labeled_option_starts) > 1:
+        options = []
+        for index, start in enumerate(labeled_option_starts):
+            end = labeled_option_starts[index + 1] if index + 1 < len(labeled_option_starts) else None
+            option = raw_options[start:end].strip()
+            if option:
+                options.append(option)
+        return options
+
+    line_options = [option.strip() for option in re.split(r"\r?\n+", raw_options) if option.strip()]
+    if len(line_options) > 1:
+        return line_options
+
+    return [option.strip() for option in raw_options.split(",") if option.strip()]
 
 
 def _clamp_top_n(value: Any) -> int:
