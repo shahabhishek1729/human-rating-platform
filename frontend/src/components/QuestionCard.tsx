@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Question } from '../types';
 
+// 5-point unipolar Likert scale for self-reported confidence (index 0 -> value 1).
+const CONFIDENCE_LABELS = ['Not at all', 'Slightly', 'Moderately', 'Very', 'Completely'];
+
 interface QuestionCardProps {
   question: Question;
   onSubmit: (answer: string, confidence: number, timeStarted: string) => Promise<void>;
@@ -169,11 +172,15 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
       cursor: 'pointer',
     },
     sliderLabels: {
-      display: 'flex',
-      justifyContent: 'space-between',
+      position: 'relative' as const,
+      height: '14px',
       marginTop: '8px',
-      fontSize: '12px',
+      fontSize: '11px',
       color: '#888',
+    },
+    sliderLabel: {
+      position: 'absolute' as const,
+      whiteSpace: 'nowrap' as const,
     },
     submitButton: {
       width: '100%',
@@ -247,7 +254,7 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
         <div style={styles.confidenceSection}>
           <div style={styles.confidenceLabel}>
             <span style={styles.confidenceTitle}>How confident are you?</span>
-            <span style={styles.confidenceValue}>{confidence}/5</span>
+            <span style={styles.confidenceValue}>{CONFIDENCE_LABELS[confidence - 1]} confident</span>
           </div>
           <input
             type="range"
@@ -258,8 +265,25 @@ function QuestionCard({ question, onSubmit, disabled = false, assistanceAnswer =
             style={styles.slider}
           />
           <div style={styles.sliderLabels}>
-            <span>Not confident</span>
-            <span>Very confident</span>
+            {CONFIDENCE_LABELS.map((label, i) => {
+              const pct = (i / (CONFIDENCE_LABELS.length - 1)) * 100;
+              const isFirst = i === 0;
+              const isLast = i === CONFIDENCE_LABELS.length - 1;
+              return (
+                <span
+                  key={label}
+                  style={{
+                    ...styles.sliderLabel,
+                    left: `${pct}%`,
+                    transform: isFirst ? 'none' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
+                    fontWeight: confidence === i + 1 ? 600 : 400,
+                    color: confidence === i + 1 ? '#4a90d9' : '#888',
+                  }}
+                >
+                  {label}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
